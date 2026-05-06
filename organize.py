@@ -18,6 +18,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import unicodedata
 from dataclasses import dataclass
 from datetime import datetime
@@ -206,6 +207,50 @@ def extract_text(path: Path, ocr_lang: str, ocr_max_pages: int) -> str:
             except Exception:
                 pass
 
+        # CLI OCR fallback for environments without pdf2image/pytesseract.
+        if (
+            len(combined) < 400
+            and shutil.which("pdftoppm")
+            and shutil.which("tesseract")
+        ):
+            try:
+                with tempfile.TemporaryDirectory(prefix="ocrpdf_") as tmpdir:
+                    prefix = Path(tmpdir) / "page"
+                    subprocess.run(
+                        [
+                            "pdftoppm",
+                            "-f",
+                            "1",
+                            "-l",
+                            str(max(1, ocr_max_pages)),
+                            "-png",
+                            str(path),
+                            str(prefix),
+                        ],
+                        capture_output=True,
+                        text=True,
+                        timeout=180,
+                        check=False,
+                    )
+
+                    ocr_chunks: list[str] = []
+                    for img_path in sorted(Path(tmpdir).glob("page-*.png")):
+                        proc = subprocess.run(
+                            ["tesseract", str(img_path), "stdout", "-l", ocr_lang],
+                            capture_output=True,
+                            text=True,
+                            timeout=120,
+                            check=False,
+                        )
+                        if proc.stdout:
+                            ocr_chunks.append(proc.stdout)
+
+                    cli_ocr_text = "\n".join(ocr_chunks).strip()
+                    if len(cli_ocr_text) > len(combined):
+                        combined = cli_ocr_text
+            except Exception:
+                pass
+
         return combined
 
     return ""
@@ -220,6 +265,7 @@ def build_no_text_hint(path: Path) -> str:
         f"pdf2image={'ok' if convert_from_path is not None else 'missing'}",
         f"pytesseract={'ok' if pytesseract is not None else 'missing'}",
         f"pdftotext={'ok' if shutil.which('pdftotext') else 'missing'}",
+        f"pdftoppm={'ok' if shutil.which('pdftoppm') else 'missing'}",
         f"tesseract={'ok' if shutil.which('tesseract') else 'missing'}",
     ]
     return "pdf_no_text; " + ", ".join(parts)

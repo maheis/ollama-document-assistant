@@ -185,6 +185,8 @@ Hinweise:
 
 Wenn diese Meldung bei PDF-Dateien auftaucht, ist es meist ein Scan-PDF ohne eingebetteten Text und OCR konnte nicht greifen.
 
+Hinweis: Das Script nutzt jetzt auch einen CLI-Fallback (`pdftoppm` + `tesseract`), falls `pdf2image`/`pytesseract` im Python-Environment fehlen.
+
 Schnellchecks:
 
 ```bash
@@ -200,6 +202,14 @@ pdftotext -layout "2022-03-31 - Raiffeisenbank AGB Leana.pdf" - | head -n 20
 ```
 
 Wenn dort nichts kommt, ist OCR erforderlich. Stelle sicher, dass `tesseract-ocr` und `tesseract-ocr-deu` installiert sind.
+
+Wenn im Log `pypdf=missing` / `pdf2image=missing` / `pytesseract=missing` steht, ist meist die falsche oder keine venv aktiv:
+
+```bash
+source .venv/bin/activate
+pip install -r requirements.txt
+python3 -c "import pypdf,pdf2image,pytesseract; print('python deps ok')"
+```
 
 ## Naechste Schritte
 
