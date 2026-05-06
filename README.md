@@ -1,6 +1,6 @@
 # Ollama Document Assistant auf Proxmox (CPU-only)
 
-Dieses Projekt beschreibt eine lokale Dokument-Automatisierung mit Ollama unter Debian in einer Proxmox-VM.
+Dieses Projekt beschreibt eine lokale Dokument-Automatisierung mit Ollama unter Debian.
 
 ## Ziel
 
@@ -13,37 +13,7 @@ Dokumente lokal verarbeiten, um:
 ## Hardware-Profil (dein Setup)
 
 - Host CPU: Intel Core i5-10210U (4C/8T)
-- Host RAM: 32 GB
-- GPU: keine dedizierte GPU
-- VMs:
-  - Home Assistant: 4 GB
-  - OPNsense: 4 GB
-  - Debian (Ollama + Pipeline): aktuell 6 GB, empfohlen 16 GB
-
-## Machbarkeit
-
-Ja, das Setup ist fuer den Anwendungsfall geeignet.
-
-- CPU-only reicht fuer Batch-Verarbeitung von Dokumenten.
-- Interaktiv ist es langsamer als mit GPU, fuer Kategorisierung und Benennung aber gut nutzbar.
-- 16 GB RAM in der Debian-VM sind ein sinnvoller Zielwert.
-
-## Proxmox Zielkonfiguration (konkret)
-
-Fuer die Debian-VM:
-- RAM: 16 GB
-- vCPU: 8 (aktuell), bei Bedarf auf 4-6 reduzieren wenn andere VMs Lastprobleme haben
-- CPU Type: host
-- Ballooning:
-  - stabilster Betrieb: aus
-  - falls aktiv: Minimum 8-10 GB setzen
-- Disk: SSD/NVMe, mindestens 40 GB (bei vielen Dokumenten eher 80+ GB)
-- SCSI Controller: VirtIO SCSI
-
-Warum:
-- Genug Reserve fuer OCR + LLM im selben Lauf
-- Bei 4 GB + 4 GB + 16 GB bleiben auf dem Host ca. 8 GB fuer Proxmox und Cache
-- 8 vCPU erhoehen Durchsatz, aber koennen ohne Drosselung den Host stark auslasten
+- Host RAM: 16 GB
 
 ## Modell-Empfehlung (Testreihenfolge)
 
@@ -290,7 +260,6 @@ python3 organize.py --input ./inbox --dry-run --model qwen2.5:3b-instruct
 
 ## Naechste Schritte
 
-1. Ist umgesetzt: Debian-VM auf 16 GB RAM und 8 vCPU.
 2. qwen2.5:3b und qwen2.5:7b gegeneinander testen.
 3. CPU-Last mit `--max-cpu-threads 4 --ollama-num-thread 4` einpegeln.
 4. Wenn OPNsense/Home Assistant Lastspitzen sehen: auf `--max-cpu-threads 2 --ollama-num-thread 2` reduzieren.
