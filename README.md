@@ -95,6 +95,8 @@ ollama pull qwen2.5:7b-instruct
 ### 4) Python-Umgebung
 
 ```bash
+git clone https://github.com/maheis/ollama-document-assistant.git
+cd ollama-document-assistant
 python3 -m venv .venv
 source .venv/bin/activate
 pip install --upgrade pip
@@ -151,19 +153,19 @@ Beispielstruktur:
 ### Dry-Run (empfohlen als erster Lauf)
 
 ```bash
-python organize.py --input /srv/docs/inbox --dry-run --model qwen2.5:7b-instruct
+python3 organize.py --input ./inbox --dry-run --model qwen2.5:7b-instruct
 ```
 
 ### Echter Lauf (Dateien werden verschoben/umbenannt)
 
 ```bash
-python organize.py --input /srv/docs/inbox --apply --model qwen2.5:7b-instruct
+python3 organize.py --input ./inbox --apply --model qwen2.5:7b-instruct
 ```
 
 ### Wichtige Optionen
 
 ```bash
-python organize.py \
+python3 organize.py \
   --input /srv/docs/inbox \
   --apply \
   --model qwen2.5:7b-instruct \
@@ -178,6 +180,26 @@ Hinweise:
 - Standard ohne `--apply` ist Dry-Run
 - Nur unterstuetzte Dateitypen werden verarbeitet (`.pdf`, Bilder, `.txt`, `.md`, ...)
 - Bei PDF ohne brauchbaren Text greift OCR (wenn Tesseract + pdf2image installiert sind)
+
+### Fehlerbild: "[SKIP] ... kein Text extrahiert"
+
+Wenn diese Meldung bei PDF-Dateien auftaucht, ist es meist ein Scan-PDF ohne eingebetteten Text und OCR konnte nicht greifen.
+
+Schnellchecks:
+
+```bash
+which pdftotext && pdftotext -v
+which tesseract && tesseract --list-langs | grep -E 'deu|eng'
+python3 -c "import pypdf,pdf2image,pytesseract; print('python deps ok')"
+```
+
+Test direkt auf eine betroffene Datei:
+
+```bash
+pdftotext -layout "2022-03-31 - Raiffeisenbank AGB Leana.pdf" - | head -n 20
+```
+
+Wenn dort nichts kommt, ist OCR erforderlich. Stelle sicher, dass `tesseract-ocr` und `tesseract-ocr-deu` installiert sind.
 
 ## Naechste Schritte
 

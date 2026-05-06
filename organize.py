@@ -16,6 +16,7 @@ import argparse
 import json
 import re
 import shutil
+import subprocess
 import sys
 import unicodedata
 from dataclasses import dataclass
@@ -178,6 +179,22 @@ def extract_text(path: Path, ocr_lang: str, ocr_max_pages: int) -> str:
 
         combined = "\n".join(chunks).strip()
 
+        # Fallback to pdftotext for PDFs that pypdf cannot extract reliably.
+        if len(combined) < 400 and shutil.which("pdftotext"):
+            try:
+                proc = subprocess.run(
+                    ["pdftotext", "-layout", str(path), "-"],
+                    capture_output=True,
+                    text=True,
+                    timeout=90,
+                    check=False,
+                )
+                pdftext = (proc.stdout or "").strip()
+                if len(pdftext) > len(combined):
+                    combined = pdftext
+            except Exception:
+                pass
+
         # OCR fallback for scanned PDFs or tiny extraction results.
         if len(combined) < 400 and convert_from_path is not None and pytesseract is not None:
             try:
@@ -192,6 +209,20 @@ def extract_text(path: Path, ocr_lang: str, ocr_max_pages: int) -> str:
         return combined
 
     return ""
+
+
+def build_no_text_hint(path: Path) -> str:
+    if path.suffix.lower() != ".pdf":
+        return "no_text_extracted"
+
+    parts = [
+        f"pypdf={'ok' if PdfReader is not None else 'missing'}",
+        f"pdf2image={'ok' if convert_from_path is not None else 'missing'}",
+        f"pytesseract={'ok' if pytesseract is not None else 'missing'}",
+        f"pdftotext={'ok' if shutil.which('pdftotext') else 'missing'}",
+        f"tesseract={'ok' if shutil.which('tesseract') else 'missing'}",
+    ]
+    return "pdf_no_text; " + ", ".join(parts)
 
 
 def build_prompt(text: str, categories: list[str]) -> str:
@@ -344,9 +375,10 @@ def main() -> int:
 
             if not text:
                 stats["skipped_empty"] += 1
-                event.update({"status": "skipped", "reason": "no_text_extracted"})
+                hint = build_no_text_hint(src)
+                event.update({"status": "skipped", "reason": hint})
                 write_log(log_path, event)
-                print(f"[SKIP] {src.name}: kein Text extrahiert")
+                print(f"[SKIP] {src.name}: kein Text extrahiert ({hint})")
                 continue
 
             clipped_text = text[: args.max_text_chars]
