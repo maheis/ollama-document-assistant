@@ -14,6 +14,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import time
 import re
 import shutil
 import subprocess
@@ -70,6 +72,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--input", required=True, help="Input folder with documents")
     parser.add_argument("--model", default="qwen2.5:7b-instruct", help="Ollama model name")
     parser.add_argument("--ollama-url", default="http://127.0.0.1:11434", help="Ollama base URL")
+    parser.add_argument("--ollama-timeout", type=int, default=180, help="Ollama request timeout in seconds")
+    parser.add_argument("--ollama-retries", type=int, default=2, help="Retries on timeout/error")
+    parser.add_argument("--ollama-retry-backoff", type=float, default=1.5, help="Backoff factor between retries")
     parser.add_argument("--categories", nargs="+", default=DEFAULT_CATEGORIES, help="Allowed categories")
     parser.add_argument("--lang", default="deu", help="OCR language for Tesseract")
     parser.add_argument("--min-confidence", type=float, default=0.75, help="Confidence threshold for auto-sort")
@@ -78,6 +83,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--review-dir", default="_review", help="Folder for low-confidence files (relative to input)")
     parser.add_argument("--log-file", default="organize_log.jsonl", help="Path to JSONL log")
     parser.add_argument("--ocr-max-pages", type=int, default=3, help="Max pages to OCR when PDF has little text")
+    parser.add_argument("--process-nice", type=int, default=5, help="Increase niceness to lower CPU priority")
+    parser.add_argument("--max-cpu-threads", type=int, default=2, help="Limit CPU threads for OCR/BLAS libs (0 disables)")
+    parser.add_argument("--ollama-num-thread", type=int, default=2, help="Limit Ollama model threads (0 uses model default)")
+    parser.add_argument("--sleep-between-files", type=float, default=0.4, help="Pause between files in seconds")
 
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--apply", action="store_true", help="Perform real file moves/renames")
@@ -290,7 +299,15 @@ def build_prompt(text: str, categories: list[str]) -> str:
     )
 
 
-def call_ollama(ollama_url: str, model: str, prompt: str) -> dict:
+def call_ollama(
+    ollama_url: str,
+    model: str,
+    prompt: str,
+    timeout_seconds: int,
+    retries: int,
+    backoff: float,
+    ollama_num_thread: int,
+) -> dict:
     endpoint = ollama_url.rstrip("/") + "/api/generate"
     payload = {
         "model": model,
@@ -298,16 +315,33 @@ def call_ollama(ollama_url: str, model: str, prompt: str) -> dict:
         "stream": False,
         "format": "json",
     }
-    response = requests.post(endpoint, json=payload, timeout=180)
-    response.raise_for_status()
-    body = response.json()
+    if ollama_num_thread > 0:
+        payload["options"] = {"num_thread": ollama_num_thread}
 
-    raw = body.get("response", "{}")
-    if isinstance(raw, dict):
-        return raw
-    if isinstance(raw, str):
-        return json.loads(raw)
+    last_exc: Optional[Exception] = None
+    attempts = max(1, retries + 1)
 
+    for attempt in range(1, attempts + 1):
+        try:
+            response = requests.post(endpoint, json=payload, timeout=timeout_seconds)
+            response.raise_for_status()
+            body = response.json()
+
+            raw = body.get("response", "{}")
+            if isinstance(raw, dict):
+                return raw
+            if isinstance(raw, str):
+                return json.loads(raw)
+            return {}
+        except (requests.Timeout, requests.ConnectionError, requests.HTTPError, json.JSONDecodeError) as exc:
+            last_exc = exc
+            if attempt >= attempts:
+                break
+            sleep_s = max(0.2, backoff ** (attempt - 1))
+            time.sleep(sleep_s)
+
+    if last_exc is not None:
+        raise last_exc
     return {}
 
 
@@ -372,9 +406,28 @@ def iter_input_files(input_dir: Path, sorted_dir_name: str, review_dir_name: str
             yield p
 
 
+def apply_runtime_limits(process_nice: int, max_cpu_threads: int) -> None:
+    if process_nice > 0:
+        try:
+            os.nice(process_nice)
+        except Exception:
+            pass
+
+    if max_cpu_threads > 0:
+        for env_key in (
+            "OMP_THREAD_LIMIT",
+            "OMP_NUM_THREADS",
+            "OPENBLAS_NUM_THREADS",
+            "MKL_NUM_THREADS",
+            "NUMEXPR_NUM_THREADS",
+        ):
+            os.environ[env_key] = str(max_cpu_threads)
+
+
 def main() -> int:
     args = parse_args()
     apply_changes = args.apply and not args.dry_run
+    apply_runtime_limits(args.process_nice, args.max_cpu_threads)
 
     input_dir = Path(args.input).expanduser().resolve()
     if not input_dir.exists() or not input_dir.is_dir():
@@ -406,6 +459,13 @@ def main() -> int:
 
     print(f"[INFO] Modus: {'APPLY' if apply_changes else 'DRY-RUN'}")
     print(f"[INFO] Dateien: {len(files)}")
+    print(
+        "[INFO] Limits: "
+        f"nice=+{args.process_nice}, "
+        f"max_cpu_threads={args.max_cpu_threads}, "
+        f"ollama_num_thread={args.ollama_num_thread}, "
+        f"sleep_between_files={args.sleep_between_files}s"
+    )
 
     for src in files:
         stats["seen"] += 1
@@ -429,7 +489,15 @@ def main() -> int:
 
             clipped_text = text[: args.max_text_chars]
             prompt = build_prompt(clipped_text, categories)
-            model_raw = call_ollama(args.ollama_url, args.model, prompt)
+            model_raw = call_ollama(
+                ollama_url=args.ollama_url,
+                model=args.model,
+                prompt=prompt,
+                timeout_seconds=args.ollama_timeout,
+                retries=args.ollama_retries,
+                backoff=args.ollama_retry_backoff,
+                ollama_num_thread=args.ollama_num_thread,
+            )
             cls = normalize_classification(model_raw, categories)
 
             target = plan_target_path(
@@ -475,6 +543,9 @@ def main() -> int:
             event.update({"status": "error", "error": str(exc)})
             write_log(log_path, event)
             print(f"[ERROR] {src.name}: {exc}")
+
+        if args.sleep_between_files > 0:
+            time.sleep(args.sleep_between_files)
 
     print("\n[SUMMARY]")
     for k, v in stats.items():

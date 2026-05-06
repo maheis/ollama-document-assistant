@@ -169,7 +169,14 @@ python3 organize.py \
   --input /srv/docs/inbox \
   --apply \
   --model qwen2.5:7b-instruct \
+  --ollama-timeout 420 \
+  --ollama-retries 2 \
+  --process-nice 5 \
+  --max-cpu-threads 2 \
+  --ollama-num-thread 2 \
+  --sleep-between-files 0.4 \
   --min-confidence 0.75 \
+  --max-text-chars 8000 \
   --sorted-dir _sorted \
   --review-dir _review \
   --log-file /var/log/doc-organize.jsonl
@@ -210,6 +217,59 @@ source .venv/bin/activate
 pip install -r requirements.txt
 python3 -c "import pypdf,pdf2image,pytesseract; print('python deps ok')"
 ```
+
+### Fehlerbild: "Read timed out (timeout=180)" bei Ollama
+
+Auf CPU-only Systemen kann ein Modellaufruf bei langen Dokumenten laenger dauern als der Standard-Timeout.
+
+Empfohlener Lauf:
+
+```bash
+python3 organize.py \
+  --input ./inbox \
+  --dry-run \
+  --model qwen2.5:7b-instruct \
+  --ollama-timeout 420 \
+  --ollama-retries 2 \
+  --max-text-chars 8000
+```
+
+Wenn es weiter zu Timeouts kommt:
+
+1. Modell auf `qwen2.5:3b-instruct` wechseln
+2. `--max-text-chars` weiter reduzieren (z. B. 5000)
+3. Sicherstellen, dass Ollama lokal laeuft: `curl http://127.0.0.1:11434/api/tags`
+
+### CPU-Nutzung begrenzen (Host entlasten)
+
+Das Script unterstuetzt eingebaute CPU-Drosselung:
+
+- `--process-nice 5`: Prozess laeuft mit niedrigerer Prioritaet
+- `--max-cpu-threads 2`: begrenzt Threads fuer OCR/BLAS-lastige Teile
+- `--ollama-num-thread 2`: begrenzt Threads fuer den Modellaufruf
+- `--sleep-between-files 0.4`: kurze Pause zwischen Dokumenten
+
+Empfehlung fuer deinen Host:
+
+```bash
+python3 organize.py \
+  --input ./inbox \
+  --dry-run \
+  --model qwen2.5:3b-instruct \
+  --ollama-timeout 420 \
+  --ollama-retries 2 \
+  --max-text-chars 6000 \
+  --process-nice 8 \
+  --max-cpu-threads 2 \
+  --ollama-num-thread 2 \
+  --sleep-between-files 0.5
+```
+
+Wenn der Host trotzdem noch zu stark ausgelastet ist:
+
+1. `--max-cpu-threads 1`
+2. `--ollama-num-thread 1`
+3. auf `qwen2.5:3b-instruct` bleiben
 
 ## Naechste Schritte
 
