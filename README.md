@@ -1,6 +1,6 @@
 # Ollama Document Assistant auf Proxmox (CPU-only)
 
-Dieses Projekt beschreibt eine lokale Dokument-Automatisierung mit Ollama [https://ollama.com] unter Debian und mit dem Copilot entstanden.
+Dieses Projekt beschreibt eine lokale Dokument-Automatisierung mit Ollama [https://ollama.com] unter Debian und ist mit dem Copilot entstanden.
 
 ## Ziel
 
