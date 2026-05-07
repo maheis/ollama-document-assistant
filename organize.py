@@ -90,6 +90,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--sorted-dir", default="_sorted", help="Folder for categorized files (relative to input)")
     parser.add_argument("--review-dir", default="_review", help="Folder for low-confidence files (relative to input)")
     parser.add_argument("--log-file", default="organize_log.jsonl", help="Path to JSONL log")
+    parser.add_argument("--run-log-file", default="organize_run.log", help="Path to plain-text run log (mirrors console output)")
     parser.add_argument("--ocr-max-pages", type=int, default=3, help="Max pages to OCR when PDF has little text")
     parser.add_argument("--process-nice", type=int, default=5, help="Increase niceness to lower CPU priority")
     parser.add_argument("--max-cpu-threads", type=int, default=4, help="Limit CPU threads for OCR/BLAS libs (0 disables)")
@@ -464,6 +465,12 @@ def write_log(log_path: Path, payload: dict) -> None:
         f.write(json.dumps(payload, ensure_ascii=False) + "\n")
 
 
+def emit(line: str, run_log_path: Path) -> None:
+    print(line)
+    with run_log_path.open("a", encoding="utf-8") as f:
+        f.write(line + "\n")
+
+
 def plan_target_path(
     src: Path,
     classification: Classification,
@@ -525,9 +532,16 @@ def main() -> int:
     apply_changes = args.apply and not args.dry_run
     apply_runtime_limits(args.process_nice, args.max_cpu_threads)
 
+    run_log_path = Path(args.run_log_file).expanduser().resolve()
+    run_log_path.parent.mkdir(parents=True, exist_ok=True)
+    emit(
+        f"[RUN] {datetime.now().isoformat(timespec='seconds')} mode={'APPLY' if apply_changes else 'DRY-RUN'}",
+        run_log_path,
+    )
+
     input_dir = Path(args.input).expanduser().resolve()
     if not input_dir.exists() or not input_dir.is_dir():
-        print(f"[ERROR] Input folder invalid: {input_dir}")
+        emit(f"[ERROR] Input folder invalid: {input_dir}", run_log_path)
         return 2
 
     sorted_root = input_dir / args.sorted_dir
@@ -541,7 +555,8 @@ def main() -> int:
 
     files = list(iter_input_files(input_dir, args.sorted_dir, args.review_dir))
     if not files:
-        print("[INFO] Keine verarbeitbaren Dateien gefunden.")
+        emit("[INFO] Keine verarbeitbaren Dateien gefunden.", run_log_path)
+        emit(f"[INFO] run_log: {run_log_path}", run_log_path)
         return 0
 
     stats = {
@@ -554,14 +569,15 @@ def main() -> int:
         "skipped_empty": 0,
     }
 
-    print(f"[INFO] Modus: {'APPLY' if apply_changes else 'DRY-RUN'}")
-    print(f"[INFO] Dateien: {len(files)}")
-    print(
+    emit(f"[INFO] Modus: {'APPLY' if apply_changes else 'DRY-RUN'}", run_log_path)
+    emit(f"[INFO] Dateien: {len(files)}", run_log_path)
+    emit(
         "[INFO] Limits: "
         f"nice=+{args.process_nice}, "
         f"max_cpu_threads={args.max_cpu_threads}, "
         f"ollama_num_thread={args.ollama_num_thread}, "
-        f"sleep_between_files={args.sleep_between_files}s"
+        f"sleep_between_files={args.sleep_between_files}s",
+        run_log_path,
     )
 
     for src in files:
@@ -581,7 +597,7 @@ def main() -> int:
                 hint = build_no_text_hint(src)
                 event.update({"status": "skipped", "reason": hint})
                 write_log(log_path, event)
-                print(f"[SKIP] {src.name}: kein Text extrahiert ({hint})")
+                emit(f"[SKIP] {src.name}: kein Text extrahiert ({hint})", run_log_path)
                 continue
 
             clipped_text = text[: args.max_text_chars]
@@ -649,23 +665,26 @@ def main() -> int:
                 action = "OCR+MOVE" if apply_changes else "OCR+PLAN"
             else:
                 action = "MOVE" if apply_changes else "PLAN"
-            print(
+            emit(
                 f"[{action}/{flag}] {src.name} -> {target.name} "
-                f"(cat={cls.category}, conf={cls.confidence:.2f})"
+                f"(cat={cls.category}, conf={cls.confidence:.2f})",
+                run_log_path,
             )
         except Exception as exc:
             stats["errors"] += 1
             event.update({"status": "error", "error": str(exc)})
             write_log(log_path, event)
-            print(f"[ERROR] {src.name}: {exc}")
+            emit(f"[ERROR] {src.name}: {exc}", run_log_path)
 
         if args.sleep_between_files > 0:
             time.sleep(args.sleep_between_files)
 
-    print("\n[SUMMARY]")
+    emit("", run_log_path)
+    emit("[SUMMARY]", run_log_path)
     for k, v in stats.items():
-        print(f"- {k}: {v}")
-    print(f"- log: {log_path}")
+        emit(f"- {k}: {v}", run_log_path)
+    emit(f"- log: {log_path}", run_log_path)
+    emit(f"- run_log: {run_log_path}", run_log_path)
 
     return 0 if stats["errors"] == 0 else 1
 

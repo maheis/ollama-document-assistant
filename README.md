@@ -160,6 +160,9 @@ Hinweise:
 - Bei PDF ohne brauchbaren Text greift OCR (wenn Tesseract + pdf2image installiert sind)
 - PDF ohne Textlayer werden im `--apply` Lauf als OCR-PDF neu erzeugt und dann im Ziel abgelegt
 - Im Log steht dafuer `ocr_pdf_rebuild: true`
+- Es werden immer zwei Logs geschrieben (Dry-Run und Apply):
+  - JSONL Event-Log: `--log-file` (Standard `organize_log.jsonl`)
+  - Konsolen-Spiegel als Textlog: `--run-log-file` (Standard `organize_run.log`)
 
 ### Fehlerbild: "[SKIP] ... kein Text extrahiert"
 
