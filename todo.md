@@ -1,6 +1,6 @@
 [x] CPU Nutzung einschränken
 [x] Dateien ohne OCR als OCR ablegen...
-[ ] LLM nicht entladen aus dem RAM
+[x] LLM nicht entladen aus dem RAM
 [x] Dry-Run in logfile
 [x] Ordner-Sortierung nach Jahreszahl
 [x] YYYY-MM-DD_ABSENDER/FIRMA_KATEGORIE_KUNDENNUMMER_TITEL.ext

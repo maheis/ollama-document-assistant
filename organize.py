@@ -93,6 +93,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--ollama-timeout", type=int, default=420, help="Ollama request timeout in seconds")
     parser.add_argument("--ollama-retries", type=int, default=2, help="Retries on timeout/error")
     parser.add_argument("--ollama-retry-backoff", type=float, default=1.5, help="Backoff factor between retries")
+    parser.add_argument("--ollama-keep-alive", default="24h", help="Keep model loaded in RAM (e.g. 24h, 30m, -1)")
     parser.add_argument("--categories", nargs="+", default=DEFAULT_CATEGORIES, help="Allowed categories")
     parser.add_argument("--lang", default="deu", help="OCR language for Tesseract")
     parser.add_argument("--min-confidence", type=float, default=0.75, help="Confidence threshold for auto-sort")
@@ -497,6 +498,7 @@ def call_ollama(
     retries: int,
     backoff: float,
     ollama_num_thread: int,
+    ollama_keep_alive: str,
 ) -> dict:
     endpoint = ollama_url.rstrip("/") + "/api/generate"
     payload = {
@@ -504,6 +506,7 @@ def call_ollama(
         "prompt": prompt,
         "stream": False,
         "format": "json",
+        "keep_alive": ollama_keep_alive,
     }
     if ollama_num_thread > 0:
         payload["options"] = {"num_thread": ollama_num_thread}
@@ -697,6 +700,7 @@ def main() -> int:
         f"nice=+{args.process_nice}, "
         f"max_cpu_threads={args.max_cpu_threads}, "
         f"ollama_num_thread={args.ollama_num_thread}, "
+        f"ollama_keep_alive={args.ollama_keep_alive}, "
         f"sleep_between_files={args.sleep_between_files}s",
         run_log_path,
     )
@@ -732,6 +736,7 @@ def main() -> int:
                 retries=args.ollama_retries,
                 backoff=args.ollama_retry_backoff,
                 ollama_num_thread=args.ollama_num_thread,
+                ollama_keep_alive=args.ollama_keep_alive,
             )
             cls = normalize_classification(model_raw, categories)
 

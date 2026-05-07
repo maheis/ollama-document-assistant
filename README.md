@@ -142,6 +142,7 @@ python3 organize.py \
   --model qwen2.5:7b-instruct \
   --ollama-timeout 420 \
   --ollama-retries 2 \
+  --ollama-keep-alive 24h \
   --process-nice 5 \
   --max-cpu-threads 2 \
   --ollama-num-thread 2 \
@@ -163,6 +164,7 @@ Hinweise:
 - Es werden immer zwei Logs geschrieben (Dry-Run und Apply):
   - JSONL Event-Log: `--log-file` (Standard `organize_log.jsonl`)
   - Konsolen-Spiegel als Textlog: `--run-log-file` (Standard `organize_run.log`)
+- Das LLM bleibt per Default im RAM: `--ollama-keep-alive 24h`
 - Optionale Kategorie-Schlagworte aus `category_hints.json` werden verwendet
 - Bei unsicheren Faellen (`confidence` niedrig oder `SONSTIGES`) kann ein Keyword-Fallback die Kategorie korrigieren
 
@@ -283,6 +285,7 @@ Aktuelle Defaults sind CPU-sicher gesetzt:
 
 - `--ollama-timeout 420`
 - `--ollama-retries 2`
+- `--ollama-keep-alive 24h`
 - `--max-text-chars 6000`
 - `--max-cpu-threads 4`
 - `--ollama-num-thread 4`
