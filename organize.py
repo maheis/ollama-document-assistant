@@ -56,6 +56,14 @@ DEFAULT_CATEGORIES = [
     "BANK",
     "STEUER",
     "GESUNDHEIT",
+    "KINDERGARTEN",
+    "SCHULE",
+    "ELTERNGELD",
+    "KINDERGELD",
+    "GEHALT",
+    "VEREIN",
+    "URLAUB",
+    "HAUSNEBENKOSTEN",
     "SONSTIGES",
 ]
 
@@ -91,6 +99,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--review-dir", default="_review", help="Folder for low-confidence files (relative to input)")
     parser.add_argument("--log-file", default="organize_log.jsonl", help="Path to JSONL log")
     parser.add_argument("--run-log-file", default="organize_run.log", help="Path to plain-text run log (mirrors console output)")
+    parser.add_argument("--category-hints-file", default="category_hints.json", help="JSON file with keywords per category")
+    parser.add_argument("--keyword-fallback-min-score", type=int, default=2, help="Minimum keyword matches to apply keyword fallback")
     parser.add_argument("--ocr-max-pages", type=int, default=3, help="Max pages to OCR when PDF has little text")
     parser.add_argument("--process-nice", type=int, default=5, help="Increase niceness to lower CPU priority")
     parser.add_argument("--max-cpu-threads", type=int, default=4, help="Limit CPU threads for OCR/BLAS libs (0 disables)")
@@ -396,6 +406,85 @@ def build_prompt(text: str, categories: list[str]) -> str:
     )
 
 
+def load_category_hints(hints_path: Path, categories: list[str]) -> dict[str, list[str]]:
+    if not hints_path.exists():
+        return {}
+
+    try:
+        raw = json.loads(hints_path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+    if not isinstance(raw, dict):
+        return {}
+
+    normalized: dict[str, list[str]] = {}
+    allowed = set(categories)
+    for key, value in raw.items():
+        category = str(key).strip().upper()
+        if category not in allowed:
+            continue
+        if not isinstance(value, list):
+            continue
+        words = [str(v).strip().lower() for v in value if str(v).strip()]
+        if words:
+            normalized[category] = words
+
+    return normalized
+
+
+def add_hints_to_prompt(prompt: str, category_hints: dict[str, list[str]]) -> str:
+    if not category_hints:
+        return prompt
+
+    lines = []
+    for category in sorted(category_hints.keys()):
+        hints = ", ".join(category_hints[category][:8])
+        if hints:
+            lines.append(f"- {category}: {hints}")
+    if not lines:
+        return prompt
+
+    hints_block = "\nZusatz-Hinweise (Schlagwoerter pro Kategorie):\n" + "\n".join(lines) + "\n"
+    return prompt + hints_block
+
+
+def keyword_category_fallback(
+    text: str,
+    category_hints: dict[str, list[str]],
+    categories: list[str],
+    min_score: int,
+) -> tuple[Optional[str], int]:
+    if not category_hints:
+        return None, 0
+
+    normalized_text = " " + slugify(text).replace("_", " ") + " "
+    scores: dict[str, int] = {}
+
+    for category in categories:
+        hints = category_hints.get(category, [])
+        score = 0
+        for hint in hints:
+            h = slugify(hint).replace("_", " ").strip()
+            if not h:
+                continue
+            if f" {h} " in normalized_text:
+                score += 1
+        scores[category] = score
+
+    ranked = sorted(scores.items(), key=lambda kv: kv[1], reverse=True)
+    if not ranked:
+        return None, 0
+
+    top_category, top_score = ranked[0]
+    second_score = ranked[1][1] if len(ranked) > 1 else 0
+
+    if top_score >= min_score and top_score >= second_score + 1:
+        return top_category, top_score
+
+    return None, top_score
+
+
 def call_ollama(
     ollama_url: str,
     model: str,
@@ -553,6 +642,12 @@ def main() -> int:
     if "SONSTIGES" not in categories:
         categories.append("SONSTIGES")
 
+    base_dir = Path(__file__).resolve().parent
+    hints_path = Path(args.category_hints_file).expanduser()
+    if not hints_path.is_absolute():
+        hints_path = base_dir / hints_path
+    category_hints = load_category_hints(hints_path, categories)
+
     files = list(iter_input_files(input_dir, args.sorted_dir, args.review_dir))
     if not files:
         emit("[INFO] Keine verarbeitbaren Dateien gefunden.", run_log_path)
@@ -571,6 +666,7 @@ def main() -> int:
 
     emit(f"[INFO] Modus: {'APPLY' if apply_changes else 'DRY-RUN'}", run_log_path)
     emit(f"[INFO] Dateien: {len(files)}", run_log_path)
+    emit(f"[INFO] category_hints: {hints_path} ({len(category_hints)} categories)", run_log_path)
     emit(
         "[INFO] Limits: "
         f"nice=+{args.process_nice}, "
@@ -602,6 +698,7 @@ def main() -> int:
 
             clipped_text = text[: args.max_text_chars]
             prompt = build_prompt(clipped_text, categories)
+            prompt = add_hints_to_prompt(prompt, category_hints)
             model_raw = call_ollama(
                 ollama_url=args.ollama_url,
                 model=args.model,
@@ -612,6 +709,21 @@ def main() -> int:
                 ollama_num_thread=args.ollama_num_thread,
             )
             cls = normalize_classification(model_raw, categories)
+
+            keyword_fallback_applied = False
+            keyword_fallback_score = 0
+            fallback_category, keyword_fallback_score = keyword_category_fallback(
+                text=text,
+                category_hints=category_hints,
+                categories=categories,
+                min_score=args.keyword_fallback_min_score,
+            )
+            if fallback_category is not None and (
+                cls.confidence < args.min_confidence or cls.category == "SONSTIGES"
+            ):
+                cls.category = fallback_category
+                cls.confidence = max(cls.confidence, args.min_confidence)
+                keyword_fallback_applied = True
 
             target = plan_target_path(
                 src=src,
@@ -655,6 +767,8 @@ def main() -> int:
                     "confidence": cls.confidence,
                     "review": in_review,
                     "ocr_pdf_rebuild": should_rebuild_ocr_pdf,
+                    "keyword_fallback_applied": keyword_fallback_applied,
+                    "keyword_fallback_score": keyword_fallback_score,
                     "model": args.model,
                 }
             )

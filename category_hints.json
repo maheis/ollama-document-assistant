@@ -1,0 +1,114 @@
+{
+    "RECHNUNG": [
+        "rechnung",
+        "betrag",
+        "faellig",
+        "zahlbar",
+        "ust-id",
+        "mwst",
+        "summe",
+        "abschlag"
+    ],
+    "VERTRAG": [
+        "vertrag",
+        "laufzeit",
+        "kuendigung",
+        "vertragsnummer",
+        "bedingungen",
+        "agb"
+    ],
+    "VERSICHERUNG": [
+        "versicherung",
+        "police",
+        "schaden",
+        "beitrag",
+        "tarif",
+        "versicherungsnummer"
+    ],
+    "BANK": [
+        "iban",
+        "bic",
+        "kontoauszug",
+        "ueberweisung",
+        "lastschrift",
+        "bank"
+    ],
+    "STEUER": [
+        "steuer",
+        "finanzamt",
+        "steuerbescheid",
+        "einkommensteuer",
+        "umsatzsteuer",
+        "elster"
+    ],
+    "GESUNDHEIT": [
+        "arzt",
+        "praxis",
+        "befund",
+        "rezept",
+        "krankenkasse",
+        "behandlung"
+    ],
+    "KINDERGARTEN": [
+        "kindergarten",
+        "kita",
+        "kitabeitrag",
+        "elternbeitrag",
+        "betreuung"
+    ],
+    "SCHULE": [
+        "schule",
+        "zeugnis",
+        "elternbrief",
+        "klassenfahrt",
+        "schulbuch",
+        "unterricht"
+    ],
+    "ELTERNGELD": [
+        "elterngeld",
+        "elterngeldstelle",
+        "bezugszeitraum",
+        "bewilligung"
+    ],
+    "KINDERGELD": [
+        "kindergeld",
+        "familienkasse",
+        "kindergeldnummer",
+        "bescheid"
+    ],
+    "GEHALT": [
+        "gehalt",
+        "lohnabrechnung",
+        "entgeltabrechnung",
+        "brutto",
+        "netto"
+    ],
+    "VEREIN": [
+        "verein",
+        "mitgliedsbeitrag",
+        "mitgliedschaft",
+        "satzung",
+        "beitritt"
+    ],
+    "URLAUB": [
+        "urlaub",
+        "reise",
+        "buchung",
+        "hotel",
+        "flug",
+        "reiseunterlagen"
+    ],
+    "HAUSNEBENKOSTEN": [
+        "nebenkosten",
+        "betriebskosten",
+        "strom",
+        "wasser",
+        "gas",
+        "hausgeld"
+    ],
+    "SONSTIGES": [
+        "mitteilung",
+        "info",
+        "schreiben"
+    ]
+}

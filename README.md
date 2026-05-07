@@ -1,6 +1,6 @@
 # Ollama Document Assistant auf Proxmox (CPU-only)
 
-Dieses Projekt beschreibt eine lokale Dokument-Automatisierung mit Ollama unter Debian.
+Dieses Projekt beschreibt eine lokale Dokument-Automatisierung mit Ollama [https://ollama.com] unter Debian.
 
 ## Ziel
 
@@ -163,6 +163,36 @@ Hinweise:
 - Es werden immer zwei Logs geschrieben (Dry-Run und Apply):
   - JSONL Event-Log: `--log-file` (Standard `organize_log.jsonl`)
   - Konsolen-Spiegel als Textlog: `--run-log-file` (Standard `organize_run.log`)
+- Optionale Kategorie-Schlagworte aus `category_hints.json` werden verwendet
+- Bei unsicheren Faellen (`confidence` niedrig oder `SONSTIGES`) kann ein Keyword-Fallback die Kategorie korrigieren
+
+### Kategorie-Schlagworte (optional, empfohlen)
+
+Datei:
+
+- `category_hints.json` (liegt im Projektordner)
+
+Neue Optionen:
+
+- `--category-hints-file category_hints.json`
+- `--keyword-fallback-min-score 2`
+
+Verhalten:
+
+1. Schlagworte werden als Zusatz-Hinweis in den Prompt gegeben.
+2. Ist das LLM unsicher oder liefert `SONSTIGES`, wird ein Keyword-Fallback geprueft.
+3. Bei eindeutigem Treffer (Score hoch genug) wird die Kategorie gesetzt.
+
+Beispiel:
+
+```bash
+python3 organize.py \
+  --input ./inbox \
+  --dry-run \
+  --model qwen2.5:3b-instruct \
+  --category-hints-file ./category_hints.json \
+  --keyword-fallback-min-score 2
+```
 
 ### Fehlerbild: "[SKIP] ... kein Text extrahiert"
 
