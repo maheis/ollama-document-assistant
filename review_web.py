@@ -264,6 +264,14 @@ class ReviewStore:
     def _save_aliases(self) -> None:
         self._write_json_file(self.paths.aliases_file, self.aliases)
 
+    def _edited_differs_from_default(self, entry: dict[str, Any]) -> bool:
+        default = entry.get("default", {})
+        edited = entry.get("edited", {})
+        for field in ("sender", "category", "customer_number", "title", "date"):
+            if str(default.get(field, "")).strip() != str(edited.get(field, "")).strip():
+                return True
+        return False
+
     def _remember_values(self, fields: dict[str, str]) -> None:
         memory = self.state["value_memory"]
         for key in ("sender", "category", "customer_number", "title"):
@@ -327,24 +335,32 @@ class ReviewStore:
             self._sync_from_log()
             rows: list[dict[str, Any]] = []
             for entry in self.state["entries"].values():
-                if entry.get("status") != "pending":
-                    continue
                 source = Path(entry.get("source", ""))
+                status_value = str(entry.get("status", "pending") or "pending")
+                target_preview = str(entry.get("deployed_target", "")).strip()
+                if status_value != "deployed" or not target_preview:
+                    target_preview = str(self._build_target(entry))
                 row = {
                     "id": entry["id"],
-                    "status": entry.get("status", "pending"),
+                    "status": status_value,
                     "source": str(source),
                     "source_name": source.name,
                     "source_exists": source.exists(),
                     "confidence": float(entry.get("confidence", 0.0) or 0.0),
                     "review": bool(entry.get("review", False)),
-                    "target_preview": str(self._build_target(entry)),
+                    "target_preview": target_preview,
                     "default": entry.get("default", {}),
                     "edited": entry.get("edited", {}),
                 }
                 rows.append(row)
 
-            rows.sort(key=lambda r: r["source_name"].lower())
+            status_order = {"pending": 0, "saved": 1, "missing": 2, "deployed": 3}
+            rows.sort(key=lambda r: (status_order.get(r.get("status", "pending"), 9), r["source_name"].lower()))
+            counts = {"pending": 0, "saved": 0, "missing": 0, "deployed": 0}
+            for row in rows:
+                key = row.get("status", "pending")
+                if key in counts:
+                    counts[key] += 1
             return {
                 "rows": rows,
                 "categories": self.categories,
@@ -353,6 +369,7 @@ class ReviewStore:
                 "log_file": str(self.paths.log_file),
                 "state_file": str(self.paths.state_file),
                 "aliases_file": str(self.paths.aliases_file),
+                "counts": counts,
             }
 
     def save_edits(self, rows: list[dict[str, Any]]) -> dict[str, Any]:
@@ -364,7 +381,7 @@ class ReviewStore:
                 if item_id not in entries:
                     continue
                 entry = entries[item_id]
-                if entry.get("status") != "pending":
+                if entry.get("status") == "deployed":
                     continue
 
                 edited = entry.get("edited", {}).copy()
@@ -380,6 +397,10 @@ class ReviewStore:
 
                 entry["edited"] = edited
                 self._remember_values(edited)
+                if Path(entry.get("source", "")).exists():
+                    entry["status"] = "saved" if self._edited_differs_from_default(entry) else "pending"
+                else:
+                    entry["status"] = "missing"
                 updated += 1
 
             self._save_state()
@@ -417,7 +438,7 @@ class ReviewStore:
                 if item_id not in entries:
                     continue
                 entry = entries[item_id]
-                if entry.get("status") != "pending":
+                if entry.get("status") == "deployed":
                     continue
 
                 incoming = row.get("edited", {}) if isinstance(row.get("edited", {}), dict) else {}
@@ -449,6 +470,7 @@ class ReviewStore:
                     entry["deployed_target"] = str(target)
                     applied += 1
                 except Exception as exc:
+                    entry["status"] = "saved" if self._edited_differs_from_default(entry) else "pending"
                     errors.append(f"{src.name}: {exc}")
 
             self._save_state()
@@ -477,261 +499,323 @@ class ReviewStore:
 HTML_PAGE = """<!doctype html>
 <html lang=\"de\">
 <head>
-  <meta charset=\"utf-8\" />
-  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
-  <title>Document Review Deploy</title>
-  <style>
-    :root {
-      --bg: #f5f4ef;
-      --card: #fffdf6;
-      --ink: #1d1f24;
-      --muted: #6d727d;
-      --accent: #0f766e;
-      --accent-2: #b45309;
-      --line: #dfdccf;
-      --ok: #166534;
-      --warn: #92400e;
-      --err: #b91c1c;
-    }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
-      color: var(--ink);
-      background: radial-gradient(circle at top right, #ebe7d6 0%, var(--bg) 40%), var(--bg);
-    }
-    .wrap { max-width: 1400px; margin: 0 auto; padding: 18px; }
-    .top {
-      background: var(--card);
-      border: 1px solid var(--line);
-      border-radius: 12px;
-      padding: 14px;
-      box-shadow: 0 8px 30px rgba(30, 24, 10, 0.06);
-      position: sticky;
-      top: 8px;
-      z-index: 2;
-    }
-    h1 { margin: 0 0 10px 0; font-size: 22px; letter-spacing: 0.2px; }
-    .meta { color: var(--muted); font-size: 13px; margin-bottom: 10px; }
-    .actions { display: flex; gap: 10px; flex-wrap: wrap; }
-    button {
-      border: 1px solid var(--line);
-      background: white;
-      color: var(--ink);
-      border-radius: 10px;
-      padding: 9px 12px;
-      cursor: pointer;
-      font-weight: 600;
-    }
-    button.primary { background: var(--accent); border-color: var(--accent); color: white; }
-    button.secondary { background: #fff7ed; border-color: #fed7aa; color: #7c2d12; }
-    .status { margin-top: 10px; font-size: 14px; }
-    .grid {
-      margin-top: 14px;
-      background: var(--card);
-      border: 1px solid var(--line);
-      border-radius: 12px;
-      overflow: auto;
-      max-height: calc(100vh - 190px);
-    }
-    table { width: 100%; border-collapse: collapse; min-width: 1300px; }
-    th, td { border-bottom: 1px solid var(--line); padding: 8px; text-align: left; vertical-align: top; }
-    th { position: sticky; top: 0; background: #f7f3e6; font-size: 12px; text-transform: uppercase; letter-spacing: 0.3px; }
-    tr:hover td { background: #fffcf1; }
-    input, select {
-      width: 100%;
-      border: 1px solid #d4cfbd;
-      border-radius: 8px;
-      padding: 7px 8px;
-      font-size: 13px;
-      background: white;
-    }
-    .mini { font-size: 12px; color: var(--muted); }
-    .pill {
-      display: inline-block;
-      border: 1px solid var(--line);
-      border-radius: 999px;
-      padding: 2px 8px;
-      font-size: 12px;
-      font-weight: 600;
-      background: #fff;
-    }
-    .review { color: var(--warn); border-color: #facc15; }
-    .sorted { color: var(--ok); border-color: #86efac; }
-    .missing { color: var(--err); border-color: #fecaca; }
-    a.filelink { color: #0e7490; text-decoration: none; }
-    a.filelink:hover { text-decoration: underline; }
-    .learn { display: flex; gap: 8px; font-size: 12px; color: var(--muted); }
-    .learn label { display: inline-flex; align-items: center; gap: 4px; }
-  </style>
+    <meta charset=\"utf-8\" />
+    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
+    <title>Document Review Deploy</title>
+    <style>
+        :root {
+            --bg: #f5f4ef;
+            --card: #fffdf6;
+            --ink: #1d1f24;
+            --muted: #6d727d;
+            --accent: #0f766e;
+            --line: #dfdccf;
+            --ok: #166534;
+            --warn: #92400e;
+            --err: #b91c1c;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+            color: var(--ink);
+            background: radial-gradient(circle at top right, #ebe7d6 0%, var(--bg) 40%), var(--bg);
+        }
+        .wrap { max-width: 1460px; margin: 0 auto; padding: 18px; }
+        .top {
+            background: var(--card);
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            padding: 14px;
+            box-shadow: 0 8px 30px rgba(30, 24, 10, 0.06);
+            position: sticky;
+            top: 8px;
+            z-index: 2;
+        }
+        h1 { margin: 0 0 10px 0; font-size: 22px; letter-spacing: 0.2px; }
+        .meta { color: var(--muted); font-size: 13px; margin-bottom: 10px; }
+        .actions { display: flex; gap: 10px; flex-wrap: wrap; }
+        button {
+            border: 1px solid var(--line);
+            background: white;
+            color: var(--ink);
+            border-radius: 10px;
+            padding: 9px 12px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        button.primary { background: var(--accent); border-color: var(--accent); color: white; }
+        button.secondary { background: #fff7ed; border-color: #fed7aa; color: #7c2d12; }
+        button:disabled { opacity: 0.55; cursor: not-allowed; }
+        .status { margin-top: 10px; font-size: 14px; }
+        .grid {
+            margin-top: 14px;
+            background: var(--card);
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            overflow: auto;
+            max-height: calc(100vh - 190px);
+        }
+        table { width: 100%; border-collapse: collapse; min-width: 1450px; }
+        th, td { border-bottom: 1px solid var(--line); padding: 8px; text-align: left; vertical-align: top; }
+        th { position: sticky; top: 0; background: #f7f3e6; font-size: 12px; text-transform: uppercase; letter-spacing: 0.3px; }
+        tr:hover td { background: #fffcf1; }
+        input, select {
+            width: 100%;
+            border: 1px solid #d4cfbd;
+            border-radius: 8px;
+            padding: 7px 8px;
+            font-size: 13px;
+            background: white;
+        }
+        .mini { font-size: 12px; color: var(--muted); }
+        .pill {
+            display: inline-block;
+            border: 1px solid var(--line);
+            border-radius: 999px;
+            padding: 2px 8px;
+            font-size: 12px;
+            font-weight: 600;
+            background: #fff;
+        }
+        .review { color: var(--warn); border-color: #facc15; }
+        .sorted { color: var(--ok); border-color: #86efac; }
+        .missing { color: var(--err); border-color: #fecaca; }
+        .status-pending { color: #334155; border-color: #cbd5e1; }
+        .status-saved { color: #7c2d12; border-color: #fdba74; background: #fff7ed; }
+        .status-deployed { color: #14532d; border-color: #86efac; background: #f0fdf4; }
+        .status-missing { color: #991b1b; border-color: #fca5a5; background: #fef2f2; }
+        a.filelink { color: #0e7490; text-decoration: none; }
+        a.filelink:hover { text-decoration: underline; }
+        .learn { display: flex; gap: 8px; font-size: 12px; color: var(--muted); flex-wrap: wrap; }
+        .learn label { display: inline-flex; align-items: center; gap: 4px; }
+        .row-actions { display: flex; gap: 8px; margin-top: 8px; }
+        .row-actions button { padding: 6px 8px; font-size: 12px; border-radius: 8px; }
+    </style>
 </head>
 <body>
-  <div class=\"wrap\">
-    <div class=\"top\">
-      <h1>Review vor Deploy</h1>
-      <div class=\"meta\" id=\"meta\"></div>
-      <div class=\"actions\">
-        <button onclick=\"reloadData()\">Neu laden</button>
-        <button class=\"secondary\" onclick=\"saveEdits()\">Aenderungen speichern</button>
-        <button class=\"primary\" onclick=\"deployAll()\">Deploy ausfuehren</button>
-      </div>
-      <div class=\"status\" id=\"status\"></div>
-    </div>
+    <div class=\"wrap\">
+        <div class=\"top\">
+            <h1>Review vor Deploy</h1>
+            <div class=\"meta\" id=\"meta\"></div>
+            <div class=\"actions\">
+                <button onclick=\"reloadData()\">Neu laden</button>
+                <button class=\"secondary\" onclick=\"saveEdits()\">Aenderungen speichern</button>
+                <button class=\"primary\" onclick=\"deployAll()\">Deploy ausfuehren</button>
+            </div>
+            <div class=\"status\" id=\"status\"></div>
+        </div>
 
-    <div class=\"grid\">
-      <table>
-        <thead>
-          <tr>
-            <th>Datei</th>
-            <th>Conf</th>
-            <th>Sender</th>
-            <th>Kategorie</th>
-            <th>Kunden-Nr</th>
-            <th>Titel</th>
-            <th>Datum</th>
-            <th>Zielvorschau</th>
-            <th>Lernen</th>
-          </tr>
-        </thead>
-        <tbody id=\"rows\"></tbody>
-      </table>
+        <div class=\"grid\">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Datei</th>
+                        <th>Status</th>
+                        <th>Conf</th>
+                        <th>Sender</th>
+                        <th>Kategorie</th>
+                        <th>Kunden-Nr</th>
+                        <th>Titel</th>
+                        <th>Datum</th>
+                        <th>Zielvorschau</th>
+                        <th>Lernen</th>
+                        <th>Aktion</th>
+                    </tr>
+                </thead>
+                <tbody id=\"rows\"></tbody>
+            </table>
+        </div>
     </div>
-  </div>
 
 <script>
 let DATA = { rows: [], categories: [], value_memory: {} };
 
 function esc(v) {
-  return String(v ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;');
+    return String(v ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;');
 }
 
 function status(text, cls = '') {
-  const el = document.getElementById('status');
-  el.textContent = text;
-  el.className = 'status ' + cls;
+    const el = document.getElementById('status');
+    el.textContent = text;
+    el.className = 'status ' + cls;
 }
 
 function optionsFor(field) {
-  const values = DATA.value_memory?.[field] || [];
-  return values.map(v => `<option value=\"${esc(v)}\"></option>`).join('');
+    const values = DATA.value_memory?.[field] || [];
+    return values.map(v => `<option value=\"${esc(v)}\"></option>`).join('');
 }
 
 function categoryOptions(selected) {
-  return DATA.categories.map(c => `<option ${c === selected ? 'selected' : ''} value=\"${esc(c)}\">${esc(c)}</option>`).join('');
+    return DATA.categories.map(c => `<option ${c === selected ? 'selected' : ''} value=\"${esc(c)}\">${esc(c)}</option>`).join('');
 }
 
 function rowMarkup(row) {
-  const badge = row.review
-    ? '<span class="pill review">REVIEW</span>'
-    : '<span class="pill sorted">SORTED</span>';
-  const missing = row.source_exists ? '' : '<div><span class="pill missing">DATEI FEHLT</span></div>';
+    const badge = row.review
+        ? '<span class="pill review">REVIEW</span>'
+        : '<span class="pill sorted">SORTED</span>';
+    const missing = row.source_exists ? '' : '<div><span class="pill missing">DATEI FEHLT</span></div>';
+    const statusClass = `status-${String(row.status || 'pending')}`;
+    const statusLabel = String(row.status || 'pending').toUpperCase();
+    const deployDisabled = row.status === 'deployed' ? 'disabled' : '';
 
-  return `<tr data-id=\"${esc(row.id)}\">
-    <td>
-      <a class=\"filelink\" target=\"_blank\" href=\"/file?id=${encodeURIComponent(row.id)}\">${esc(row.source_name)}</a>
-      <div class=\"mini\">${esc(row.source)}</div>
-      <div>${badge}</div>
-      ${missing}
-    </td>
-    <td>${Number(row.confidence || 0).toFixed(2)}</td>
-    <td>
-      <input list=\"sender-mem\" name=\"sender\" value=\"${esc(row.edited.sender || '')}\" />
-      <div class=\"mini\">LLM: ${esc(row.default.sender || '')}</div>
-    </td>
-    <td>
-      <select name=\"category\">${categoryOptions(row.edited.category || 'SONSTIGES')}</select>
-      <div class=\"mini\">LLM: ${esc(row.default.category || '')}</div>
-    </td>
-    <td>
-      <input list=\"customer_number-mem\" name=\"customer_number\" value=\"${esc(row.edited.customer_number || '')}\" />
-      <div class=\"mini\">LLM: ${esc(row.default.customer_number || '')}</div>
-    </td>
-    <td>
-      <input list=\"title-mem\" name=\"title\" value=\"${esc(row.edited.title || '')}\" />
-      <div class=\"mini\">LLM: ${esc(row.default.title || '')}</div>
-    </td>
-    <td>
-      <input name=\"date\" value=\"${esc(row.edited.date || '')}\" placeholder=\"YYYY-MM-DD\" />
-      <div class=\"mini\">LLM: ${esc(row.default.date || '')}</div>
-    </td>
-    <td class=\"mini\">${esc(row.target_preview || '')}</td>
-    <td>
-      <div class=\"learn\">
-        <label><input type=\"checkbox\" name=\"learn_sender\" /> Sender</label>
-        <label><input type=\"checkbox\" name=\"learn_category\" /> Kategorie</label>
-        <label><input type=\"checkbox\" name=\"learn_customer_number\" /> Kunden-Nr</label>
-        <label><input type=\"checkbox\" name=\"learn_title\" /> Titel</label>
-      </div>
-    </td>
-  </tr>`;
+    return `<tr data-id=\"${esc(row.id)}\">
+        <td>
+            <a class=\"filelink\" target=\"_blank\" href=\"/file?id=${encodeURIComponent(row.id)}\">${esc(row.source_name)}</a>
+            <div class=\"mini\">${esc(row.source)}</div>
+            <div>${badge}</div>
+            ${missing}
+        </td>
+        <td><span class=\"pill ${statusClass}\">${esc(statusLabel)}</span></td>
+        <td>${Number(row.confidence || 0).toFixed(2)}</td>
+        <td>
+            <input list=\"sender-mem\" name=\"sender\" value=\"${esc(row.edited.sender || '')}\" />
+            <div class=\"mini\">LLM: ${esc(row.default.sender || '')}</div>
+        </td>
+        <td>
+            <select name=\"category\">${categoryOptions(row.edited.category || 'SONSTIGES')}</select>
+            <div class=\"mini\">LLM: ${esc(row.default.category || '')}</div>
+        </td>
+        <td>
+            <input list=\"customer_number-mem\" name=\"customer_number\" value=\"${esc(row.edited.customer_number || '')}\" />
+            <div class=\"mini\">LLM: ${esc(row.default.customer_number || '')}</div>
+        </td>
+        <td>
+            <input list=\"title-mem\" name=\"title\" value=\"${esc(row.edited.title || '')}\" />
+            <div class=\"mini\">LLM: ${esc(row.default.title || '')}</div>
+        </td>
+        <td>
+            <input name=\"date\" value=\"${esc(row.edited.date || '')}\" placeholder=\"YYYY-MM-DD\" />
+            <div class=\"mini\">LLM: ${esc(row.default.date || '')}</div>
+        </td>
+        <td class=\"mini\">${esc(row.target_preview || '')}</td>
+        <td>
+            <div class=\"learn\">
+                <label><input type=\"checkbox\" name=\"learn_sender\" /> Sender</label>
+                <label><input type=\"checkbox\" name=\"learn_category\" /> Kategorie</label>
+                <label><input type=\"checkbox\" name=\"learn_customer_number\" /> Kunden-Nr</label>
+                <label><input type=\"checkbox\" name=\"learn_title\" /> Titel</label>
+            </div>
+        </td>
+        <td>
+            <div class=\"row-actions\">
+                <button onclick=\"saveRow('${esc(row.id)}')\" ${deployDisabled}>Speichern</button>
+                <button class=\"primary\" onclick=\"deployRow('${esc(row.id)}')\" ${deployDisabled}>Deploy Zeile</button>
+            </div>
+        </td>
+    </tr>`;
+}
+
+function rowPayload(tr) {
+    return {
+        id: tr.dataset.id,
+        edited: {
+            sender: tr.querySelector('[name="sender"]').value,
+            category: tr.querySelector('[name="category"]').value,
+            customer_number: tr.querySelector('[name="customer_number"]').value,
+            title: tr.querySelector('[name="title"]').value,
+            date: tr.querySelector('[name="date"]').value,
+        },
+        learn: {
+            sender: tr.querySelector('[name="learn_sender"]').checked,
+            category: tr.querySelector('[name="learn_category"]').checked,
+            customer_number: tr.querySelector('[name="learn_customer_number"]').checked,
+            title: tr.querySelector('[name="learn_title"]').checked,
+        }
+    };
 }
 
 function collectRows() {
-  const trs = [...document.querySelectorAll('#rows tr')];
-  return trs.map(tr => ({
-    id: tr.dataset.id,
-    edited: {
-      sender: tr.querySelector('[name="sender"]').value,
-      category: tr.querySelector('[name="category"]').value,
-      customer_number: tr.querySelector('[name="customer_number"]').value,
-      title: tr.querySelector('[name="title"]').value,
-      date: tr.querySelector('[name="date"]').value,
-    },
-    learn: {
-      sender: tr.querySelector('[name="learn_sender"]').checked,
-      category: tr.querySelector('[name="learn_category"]').checked,
-      customer_number: tr.querySelector('[name="learn_customer_number"]').checked,
-      title: tr.querySelector('[name="learn_title"]').checked,
-    }
-  }));
+    const trs = [...document.querySelectorAll('#rows tr')];
+    return trs.map(rowPayload);
+}
+
+function findRow(id) {
+    return document.querySelector(`#rows tr[data-id="${CSS.escape(id)}"]`);
 }
 
 async function reloadData() {
-  status('Lade Daten...');
-  const res = await fetch('/api/pending');
-  const payload = await res.json();
-  DATA = payload;
+    status('Lade Daten...');
+    const res = await fetch('/api/pending');
+    const payload = await res.json();
+    DATA = payload;
 
-  document.getElementById('meta').textContent = `Log: ${payload.log_file} | State: ${payload.state_file} | Aliases: ${payload.aliases_file} | Offene Eintraege: ${payload.rows.length}`;
+    const counts = payload.counts || {};
+    const openCount = (counts.pending || 0) + (counts.saved || 0) + (counts.missing || 0);
+    document.getElementById('meta').textContent = `Log: ${payload.log_file} | State: ${payload.state_file} | Aliases: ${payload.aliases_file} | Pending=${counts.pending || 0}, Saved=${counts.saved || 0}, Missing=${counts.missing || 0}, Deployed=${counts.deployed || 0}`;
 
-  document.getElementById('rows').innerHTML = payload.rows.map(rowMarkup).join('');
-  const dlSender = `<datalist id=\"sender-mem\">${optionsFor('sender')}</datalist>`;
-  const dlCustomer = `<datalist id=\"customer_number-mem\">${optionsFor('customer_number')}</datalist>`;
-  const dlTitle = `<datalist id=\"title-mem\">${optionsFor('title')}</datalist>`;
+    document.getElementById('rows').innerHTML = payload.rows.map(rowMarkup).join('');
+    const dlSender = `<datalist id=\"sender-mem\">${optionsFor('sender')}</datalist>`;
+    const dlCustomer = `<datalist id=\"customer_number-mem\">${optionsFor('customer_number')}</datalist>`;
+    const dlTitle = `<datalist id=\"title-mem\">${optionsFor('title')}</datalist>`;
 
-  document.querySelectorAll('datalist').forEach(n => n.remove());
-  document.body.insertAdjacentHTML('beforeend', dlSender + dlCustomer + dlTitle);
-  status(`Bereit. ${payload.rows.length} offene Eintraege.`);
+    document.querySelectorAll('datalist').forEach(n => n.remove());
+    document.body.insertAdjacentHTML('beforeend', dlSender + dlCustomer + dlTitle);
+    status(`Bereit. ${openCount} offene Eintraege.`);
 }
 
 async function saveEdits() {
-  const rows = collectRows();
-  const res = await fetch('/api/save-edits', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ rows })
-  });
-  const payload = await res.json();
-  status(`Gespeichert: ${payload.updated}`);
-  await reloadData();
+    const rows = collectRows();
+    const res = await fetch('/api/save-edits', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rows })
+    });
+    const payload = await res.json();
+    status(`Gespeichert: ${payload.updated}`);
+    await reloadData();
+}
+
+async function saveRow(id) {
+    const tr = findRow(id);
+    if (!tr) {
+        status('Zeile nicht gefunden.');
+        return;
+    }
+    const res = await fetch('/api/save-edits', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rows: [rowPayload(tr)] })
+    });
+    const payload = await res.json();
+    status(`Zeile gespeichert: ${payload.updated}`);
+    await reloadData();
 }
 
 async function deployAll() {
-  const rows = collectRows();
-  if (!rows.length) {
-    status('Keine offenen Eintraege.');
-    return;
-  }
-  status('Deploy laeuft...');
-  const res = await fetch('/api/deploy', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ rows })
-  });
-  const payload = await res.json();
-  const msg = `Deploy fertig: moved=${payload.applied}, missing=${payload.missing}, gelernt=${payload.learned_aliases}, errors=${(payload.errors || []).length}`;
-  status(msg);
-  await reloadData();
+    const rows = collectRows();
+    if (!rows.length) {
+        status('Keine offenen Eintraege.');
+        return;
+    }
+    status('Deploy laeuft...');
+    const res = await fetch('/api/deploy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rows })
+    });
+    const payload = await res.json();
+    const msg = `Deploy fertig: moved=${payload.applied}, missing=${payload.missing}, gelernt=${payload.learned_aliases}, errors=${(payload.errors || []).length}`;
+    status(msg);
+    await reloadData();
+}
+
+async function deployRow(id) {
+    const tr = findRow(id);
+    if (!tr) {
+        status('Zeile nicht gefunden.');
+        return;
+    }
+    status('Deploy Zeile laeuft...');
+    const res = await fetch('/api/deploy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rows: [rowPayload(tr)] })
+    });
+    const payload = await res.json();
+    const msg = `Zeile deployt: moved=${payload.applied}, missing=${payload.missing}, gelernt=${payload.learned_aliases}, errors=${(payload.errors || []).length}`;
+    status(msg);
+    await reloadData();
 }
 
 reloadData();

@@ -247,9 +247,10 @@ Funktionen in der UI:
 
 1. Eintraege in Spalten bearbeiten: Sender, Kategorie, Kunden-Nr, Titel, Datum
 2. Dokument pro Zeile direkt oeffnen
-3. Aenderungen speichern ohne Deploy
-4. Deploy ausfuehren (erst dann werden Dateien verschoben)
-5. Pro Feld Lern-Haken setzen (z. B. `adac_autoversicherung_ag` -> `ADAC`)
+3. Aenderungen speichern ohne Deploy (global oder pro Zeile)
+4. Deploy ausfuehren (global oder pro Zeile; erst dann werden Dateien verschoben)
+5. Expliziter Status pro Eintrag: `PENDING`, `SAVED`, `MISSING`, `DEPLOYED`
+6. Pro Feld Lern-Haken setzen (z. B. `adac_autoversicherung_ag` -> `ADAC`)
 
 Lernen fuer zukuenftige Dokumente:
 
