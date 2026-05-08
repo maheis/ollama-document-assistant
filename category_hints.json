@@ -14,8 +14,7 @@
         "laufzeit",
         "kuendigung",
         "vertragsnummer",
-        "bedingungen",
-        "agb"
+        "bedingungen"
     ],
     "VERSICHERUNG": [
         "versicherung",
@@ -31,7 +30,8 @@
         "kontoauszug",
         "ueberweisung",
         "lastschrift",
-        "bank"
+        "bank",
+        "bauspar"
     ],
     "STEUER": [
         "steuer",
