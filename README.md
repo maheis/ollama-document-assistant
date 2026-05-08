@@ -241,8 +241,22 @@ python3 organize.py \
 Wichtige Hinweise:
 
 - `--apply` ist deaktiviert
-- Logs landen in `/tmp` (mit Datums-Prefix)
+- Logs landen persistent in `./logs` (mit Datums-Prefix), z. B. `logs/2026-05-08_organize_log.jsonl`
 - bei wenig PDF-Text greift OCR
+
+Log-Dateien aufraeumen:
+
+```bash
+# Alle Organize-Logs anzeigen
+ls -lah ./logs/
+
+# Logs aelter als 30 Tage loeschen
+find ./logs -type f -name '*_organize_*.log*' -mtime +30 -delete
+find ./logs -type f -name '*_organize_*.jsonl' -mtime +30 -delete
+
+# Alle Logs komplett loeschen (nur wenn gewollt)
+rm -f ./logs/*_organize_*.log* ./logs/*_organize_*.jsonl
+```
 
 ## Troubleshooting
 

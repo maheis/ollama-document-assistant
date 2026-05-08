@@ -223,6 +223,7 @@ ensure_assistant_config() {
   "review_web": {
     "host": "127.0.0.1",
     "port": 8449,
+    "log_file": "logs/organize_log.jsonl",
     "state_file": "review_state.json",
     "field_aliases_file": "field_aliases.json",
     "auth_password_file": ".review_web_password",

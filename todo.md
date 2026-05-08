@@ -30,6 +30,6 @@
 [x] install skript um alles einzurichten.
 [x] inbox pfad konfigurierbar
 [x] ausgabepfad konfigurierbar
-[ ] log und jasonl sinnvoll verkaspern (persistieren auch über reboot hinaus)
+[x] log und jasonl sinnvoll verkaspern (persistieren auch über reboot hinaus)
 [x] sinnvoller installationspfad
 [x] installation über wget/curl (install.sh ziehen und dann abfahrt mit dem rest inkl. checkout.)

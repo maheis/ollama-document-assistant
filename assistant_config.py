@@ -55,6 +55,7 @@ def validate_config(config: dict[str, Any]) -> list[str]:
     if isinstance(review_web, dict):
         _validate_host_port(errors, review_web, scope="review_web")
         _validate_positive_int(errors, review_web, "session_ttl_seconds", scope="review_web", min_value=300)
+        _validate_str(errors, review_web, "log_file", scope="review_web")
         _validate_str(errors, review_web, "state_file", scope="review_web")
         _validate_str(errors, review_web, "field_aliases_file", scope="review_web")
         _validate_str(errors, review_web, "auth_password", scope="review_web")

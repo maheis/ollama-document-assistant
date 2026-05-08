@@ -102,8 +102,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-text-chars", type=int, default=6000, help="Max chars sent to the model")
     parser.add_argument("--sorted-dir", default="_sorted", help="Folder for categorized files (relative to input)")
     parser.add_argument("--review-dir", default="_review", help="Folder for low-confidence files (relative to input)")
-    parser.add_argument("--log-file", default="organize_log.jsonl", help="Path to JSONL log")
-    parser.add_argument("--run-log-file", default="organize_run.log", help="Path to plain-text run log (mirrors console output)")
+    parser.add_argument("--log-file", default="logs/organize_log.jsonl", help="Path to JSONL log")
+    parser.add_argument("--run-log-file", default="logs/organize_run.log", help="Path to plain-text run log (mirrors console output)")
     parser.add_argument("--category-hints-file", default="category_hints.json", help="JSON file with keywords per category")
     parser.add_argument("--keyword-fallback-min-score", type=int, default=2, help="Minimum keyword matches to apply keyword fallback")
     parser.add_argument("--customer-number-hints-file", default="customer_number_hints.json", help="JSON file with labels/patterns for customer/reference number extraction")
@@ -824,10 +824,11 @@ def emit(line: str, run_log_path: Path) -> None:
         f.write(line + "\n")
 
 
-def build_tmp_dated_log_path(file_name_or_path: str, date_prefix: str) -> Path:
-    # Always write logs to /tmp and keep only the filename part from user input.
-    base_name = Path(file_name_or_path).name or "organize.log"
-    return Path("/tmp") / f"{date_prefix}_{base_name}"
+def build_dated_log_path(file_name_or_path: str, date_prefix: str, fallback_name: str) -> Path:
+    raw = Path((file_name_or_path or "").strip() or fallback_name).expanduser()
+    base_name = raw.name or fallback_name
+    parent = raw.parent if str(raw.parent) not in {"", "."} else Path.cwd()
+    return parent / f"{date_prefix}_{base_name}"
 
 
 def plan_target_path(
@@ -903,7 +904,7 @@ def main() -> int:
     apply_runtime_limits(args.process_nice, args.max_cpu_threads)
 
     date_prefix = datetime.now().strftime("%Y-%m-%d")
-    run_log_path = build_tmp_dated_log_path(args.run_log_file, date_prefix)
+    run_log_path = build_dated_log_path(args.run_log_file, date_prefix, "organize_run.log")
     run_log_path.parent.mkdir(parents=True, exist_ok=True)
     emit(
         f"[RUN] {datetime.now().isoformat(timespec='seconds')} mode={'APPLY' if apply_changes else 'DRY-RUN'}",
@@ -921,7 +922,7 @@ def main() -> int:
 
     sorted_root = output_root / args.sorted_dir
     review_root = output_root / args.review_dir
-    log_path = build_tmp_dated_log_path(args.log_file, date_prefix)
+    log_path = build_dated_log_path(args.log_file, date_prefix, "organize_log.jsonl")
     log_path.parent.mkdir(parents=True, exist_ok=True)
 
     categories = [c.strip().upper() for c in args.categories if c.strip()]

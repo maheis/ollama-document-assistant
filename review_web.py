@@ -1180,23 +1180,43 @@ class Handler(BaseHTTPRequestHandler):
         self._text_response("Not found", status=404, content_type="text/plain; charset=utf-8")
 
 
-def find_latest_log_file(explicit: str) -> Path:
+def _latest_by_mtime(paths: list[Path]) -> Optional[Path]:
+    if not paths:
+        return None
+    return sorted(paths, key=lambda p: p.stat().st_mtime, reverse=True)[0]
+
+
+def find_latest_log_file(explicit: str, base_dir: Path) -> Path:
     if explicit.strip():
         p = Path(explicit).expanduser()
+        if not p.is_absolute():
+            p = base_dir / p
         if p.exists():
             return p.resolve()
+
+        # If explicit points to the non-dated base filename, accept dated variants.
+        dated = list(p.parent.glob(f"*_{p.name}")) if p.parent.exists() else []
+        latest_dated = _latest_by_mtime([c for c in dated if c.is_file()])
+        if latest_dated is not None:
+            return latest_dated.resolve()
+
         raise FileNotFoundError(f"Log file not found: {p}")
 
-    candidates = sorted(Path("/tmp").glob("*_organize_log.jsonl"), key=lambda p: p.stat().st_mtime, reverse=True)
-    if not candidates:
-        raise FileNotFoundError("No /tmp/*_organize_log.jsonl file found. Run organize.py --dry-run first.")
-    return candidates[0].resolve()
+    candidates: list[Path] = []
+    for d in [base_dir / "logs", Path("/tmp")]:
+        if d.exists():
+            candidates.extend([p for p in d.glob("*_organize_log.jsonl") if p.is_file()])
+
+    latest = _latest_by_mtime(candidates)
+    if latest is None:
+        raise FileNotFoundError("No organize_log JSONL found in ./logs or /tmp. Run organize.py --dry-run first.")
+    return latest.resolve()
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Review and deploy organize.py suggestions")
     parser.add_argument("--config-file", default="assistant_config.json", help="Path to shared JSON config file")
-    parser.add_argument("--log-file", default=None, help="Path to JSONL log file (default: latest /tmp/*_organize_log.jsonl)")
+    parser.add_argument("--log-file", default=None, help="Path to JSONL log file (default: latest from ./logs, fallback /tmp)")
     parser.add_argument("--state-file", default=None, help="State file path")
     parser.add_argument("--field-aliases-file", default=None, help="Aliases file shared with organize.py")
     parser.add_argument("--auth-password", default=None, help="Login password for web UI/API")
@@ -1255,7 +1275,7 @@ def main() -> int:
     if not isinstance(categories_raw, list):
         categories_raw = DEFAULT_CATEGORIES
 
-    log_file = find_latest_log_file(log_file_arg)
+    log_file = find_latest_log_file(log_file_arg, base_dir)
 
     state_file = Path(state_file_arg).expanduser()
     if not state_file.is_absolute():
