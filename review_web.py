@@ -256,57 +256,73 @@ class ReviewStore:
             normalized[key] = {str(k): str(v) for k, v in raw.items() if str(k).strip() and str(v).strip()}
         return normalized
 
+    def _log_files_for_sync(self) -> list[Path]:
+        base = self.paths.log_file
+        candidates: list[Path] = []
+
+        if base.exists() and base.is_file():
+            candidates.append(base)
+
+        if base.parent.exists():
+            candidates.extend([p for p in base.parent.glob("*_organize_log.jsonl") if p.is_file()])
+
+        # Deduplicate while preserving deterministic ordering by file path.
+        unique = sorted({p.resolve() for p in candidates})
+        return unique
+
     def _sync_from_log(self) -> None:
-        if not self.paths.log_file.exists():
-            return
-
         entries = self.state["entries"]
-        try:
-            lines = self.paths.log_file.read_text(encoding="utf-8").splitlines()
-        except Exception:
+        log_files = self._log_files_for_sync()
+        if not log_files:
             return
 
-        for line in lines:
-            line = line.strip()
-            if not line:
-                continue
+        for log_file in log_files:
             try:
-                event = json.loads(line)
+                lines = log_file.read_text(encoding="utf-8").splitlines()
             except Exception:
                 continue
 
-            if event.get("status") != "ok":
-                continue
-            if not event.get("source") or not event.get("target"):
-                continue
+            for line in lines:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    event = json.loads(line)
+                except Exception:
+                    continue
 
-            item_id = entry_id_for_event(event)
-            if item_id in entries:
-                continue
+                if event.get("status") != "ok":
+                    continue
+                if not event.get("source") or not event.get("target"):
+                    continue
 
-            default_fields = {
-                "sender": str(event.get("sender", "")).strip(),
-                "category": str(event.get("category", "SONSTIGES")).strip().upper() or "SONSTIGES",
-                "customer_number": str(event.get("customer_number", "")).strip(),
-                "title": str(event.get("title", "")).strip(),
-                "date": str(event.get("date", "")).strip(),
-            }
-            if default_fields["category"] not in self.categories:
-                default_fields["category"] = "SONSTIGES"
+                item_id = entry_id_for_event(event)
+                if item_id in entries:
+                    continue
 
-            entries[item_id] = {
-                "id": item_id,
-                "status": "pending",
-                "source": str(event.get("source")),
-                "target": str(event.get("target")),
-                "default": default_fields,
-                "edited": dict(default_fields),
-                "confidence": float(event.get("confidence", 0.0) or 0.0),
-                "review": bool(event.get("review", False)),
-                "created_at": str(event.get("timestamp", "")),
-                "deployed_at": "",
-                "deployed_target": "",
-            }
+                default_fields = {
+                    "sender": str(event.get("sender", "")).strip(),
+                    "category": str(event.get("category", "SONSTIGES")).strip().upper() or "SONSTIGES",
+                    "customer_number": str(event.get("customer_number", "")).strip(),
+                    "title": str(event.get("title", "")).strip(),
+                    "date": str(event.get("date", "")).strip(),
+                }
+                if default_fields["category"] not in self.categories:
+                    default_fields["category"] = "SONSTIGES"
+
+                entries[item_id] = {
+                    "id": item_id,
+                    "status": "pending",
+                    "source": str(event.get("source")),
+                    "target": str(event.get("target")),
+                    "default": default_fields,
+                    "edited": dict(default_fields),
+                    "confidence": float(event.get("confidence", 0.0) or 0.0),
+                    "review": bool(event.get("review", False)),
+                    "created_at": str(event.get("timestamp", "")),
+                    "deployed_at": "",
+                    "deployed_target": "",
+                }
 
         self._save_state()
 
