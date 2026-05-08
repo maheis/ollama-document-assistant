@@ -686,6 +686,12 @@ def emit(line: str, run_log_path: Path) -> None:
         f.write(line + "\n")
 
 
+def build_tmp_dated_log_path(file_name_or_path: str, date_prefix: str) -> Path:
+    # Always write logs to /tmp and keep only the filename part from user input.
+    base_name = Path(file_name_or_path).name or "organize.log"
+    return Path("/tmp") / f"{date_prefix}_{base_name}"
+
+
 def plan_target_path(
     src: Path,
     classification: Classification,
@@ -754,7 +760,8 @@ def main() -> int:
     apply_changes = args.apply and not args.dry_run
     apply_runtime_limits(args.process_nice, args.max_cpu_threads)
 
-    run_log_path = Path(args.run_log_file).expanduser().resolve()
+    date_prefix = datetime.now().strftime("%Y-%m-%d")
+    run_log_path = build_tmp_dated_log_path(args.run_log_file, date_prefix)
     run_log_path.parent.mkdir(parents=True, exist_ok=True)
     emit(
         f"[RUN] {datetime.now().isoformat(timespec='seconds')} mode={'APPLY' if apply_changes else 'DRY-RUN'}",
@@ -768,7 +775,7 @@ def main() -> int:
 
     sorted_root = input_dir / args.sorted_dir
     review_root = input_dir / args.review_dir
-    log_path = Path(args.log_file).expanduser().resolve()
+    log_path = build_tmp_dated_log_path(args.log_file, date_prefix)
     log_path.parent.mkdir(parents=True, exist_ok=True)
 
     categories = [c.strip().upper() for c in args.categories if c.strip()]

@@ -187,7 +187,7 @@ python3 organize.py \
   --max-text-chars 8000 \
   --sorted-dir _sorted \
   --review-dir _review \
-  --log-file /var/log/doc-organize.jsonl
+  --log-file doc-organize.jsonl
 ```
 
 Hinweise:
@@ -200,6 +200,8 @@ Hinweise:
 - Es werden immer zwei Logs geschrieben (Dry-Run und Apply):
   - JSONL Event-Log: `--log-file` (Standard `organize_log.jsonl`)
   - Konsolen-Spiegel als Textlog: `--run-log-file` (Standard `organize_run.log`)
+  - Beide Logs werden immer unter `/tmp` geschrieben und mit Datum gepraefixt, z. B. `/tmp/2026-05-08_organize_log.jsonl`
+  - Bei den Optionen `--log-file` und `--run-log-file` wird nur der Dateiname verwendet
 - Das LLM bleibt per Default im RAM: `--ollama-keep-alive 24h`
 - Optionale Kategorie-Schlagworte aus `category_hints.json` werden verwendet
 - Bei unsicheren Faellen (`confidence` niedrig oder `SONSTIGES`) kann ein Keyword-Fallback die Kategorie korrigieren
