@@ -132,7 +132,7 @@ Regeln:
 ## Cron (optional)
 
 ```cron
-0 2 * * * /home/USER/doc-ai/.venv/bin/python /home/USER/doc-ai/organize.py --input /srv/docs/inbox --apply >> /var/log/doc-ai.log 2>&1
+0 2 * * * /home/USER/doc-ai/.venv/bin/python /home/USER/doc-ai/organize.py --input /srv/docs/inbox --dry-run >> /var/log/doc-ai.log 2>&1
 
 35       20       *       *       *       python3 ~/ollama-document-assistant/organize.py --input ~/ollama-document-assistant/inbox --dry-run --model qwen2.5:3b-instruct
 35       22       *       *       *       python3 ~/ollama-document-assistant/organize.py --input ~/ollama-document-assistant/inbox --dry-run --model qwen2.5:7b-instruct
@@ -168,18 +168,18 @@ Hinweis zur Modellauswahl:
 - Wenn `--model` leer bleibt und genau ein Modell installiert ist, wird dieses automatisch genutzt.
 - Bei mehreren installierten Modellen ohne `--model` bricht das Script mit Hinweis ab.
 
-### Echter Lauf (Dateien werden verschoben/umbenannt)
+### Finales Umbenennen (nur Web-Deploy)
 
-```bash
-python3 organize.py --input ./inbox --apply --model qwen2.5:7b-instruct
-```
+Das finale Verschieben/Umbenennen erfolgt ausschliesslich ueber `review_web.py` per Deploy-Button.
+
+`organize.py` erzeugt immer nur Vorschlaege (Dry-Run).
 
 ### Wichtige Optionen
 
 ```bash
 python3 organize.py \
   --input /srv/docs/inbox \
-  --apply \
+  --dry-run \
   --model qwen2.5:7b-instruct \
   --ollama-timeout 1800 \
   --ollama-retries 0 \
@@ -198,12 +198,11 @@ python3 organize.py \
 
 Hinweise:
 
-- Standard ohne `--apply` ist Dry-Run
+- `organize.py` arbeitet immer als Dry-Run-Vorschlagsgenerator
+- `--apply` ist deaktiviert; finales Umbenennen erfolgt nur ueber Web-Deploy
 - Nur unterstuetzte Dateitypen werden verarbeitet (`.pdf`, Bilder, `.txt`, `.md`, ...)
 - Bei PDF ohne brauchbaren Text greift OCR (wenn Tesseract + pdf2image installiert sind)
-- PDF ohne Textlayer werden im `--apply` Lauf als OCR-PDF neu erzeugt und dann im Ziel abgelegt
-- Im Log steht dafuer `ocr_pdf_rebuild: true`
-- Es werden immer zwei Logs geschrieben (Dry-Run und Apply):
+- Es werden immer zwei Logs geschrieben:
   - JSONL Event-Log: `--log-file` (Standard `organize_log.jsonl`)
   - Konsolen-Spiegel als Textlog: `--run-log-file` (Standard `organize_run.log`)
   - Beide Logs werden immer unter `/tmp` geschrieben und mit Datum gepraefixt, z. B. `/tmp/2026-05-08_organize_log.jsonl`

@@ -5,7 +5,7 @@ Features:
 - Text extraction from PDF/TXT/MD and OCR fallback for scans
 - Image OCR for common image types
 - Local Ollama JSON classification (category/title/date/confidence)
-- Safe dry-run/apply mode
+- Dry-run suggestions for web-based review/deploy workflow
 - Move low-confidence files to review folder
 - Rename with collision handling
 """
@@ -114,8 +114,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--sleep-between-files", type=float, default=0.4, help="Pause between files in seconds")
 
     mode = parser.add_mutually_exclusive_group()
-    mode.add_argument("--apply", action="store_true", help="Perform real file moves/renames")
-    mode.add_argument("--dry-run", action="store_true", help="Preview actions without changing files")
+    mode.add_argument(
+        "--apply",
+        action="store_true",
+        help="Deprecated/blocked: final rename is done via review_web.py deploy",
+    )
+    mode.add_argument("--dry-run", action="store_true", help="Preview suggestions (default behavior)")
 
     return parser.parse_args()
 
@@ -890,7 +894,11 @@ def apply_runtime_limits(process_nice: int, max_cpu_threads: int) -> None:
 
 def main() -> int:
     args = parse_args()
-    apply_changes = args.apply and not args.dry_run
+    if args.apply:
+        print("[ERROR] --apply ist deaktiviert. Bitte immer Dry-Run mit organize.py und finales Umbenennen ueber review_web.py Deploy.")
+        return 2
+
+    apply_changes = False
     apply_runtime_limits(args.process_nice, args.max_cpu_threads)
 
     date_prefix = datetime.now().strftime("%Y-%m-%d")

@@ -23,7 +23,7 @@
 [x] Neue Katergorien
         AUTO
 [x] Ne Webseite wo die Vorschläge stehen, man diese Anpassen kann und dann auf Knopfdruck deployen, erst dann werden die Dokumente umbenannt. Die Dateien sollen aber von da aus aufrufbar sein, damit man bei Bedarf in das Dokument schauen kann. Alles was noch nicht deployed ist, soll dort auftauchen und stehen bleiben, bis man es commited. Die Einträge sollen in Spalten aufgeteilt und angepasst werden können. Die Einträge sollen als Auswahl zur jeweiligen Liste gespeichert werden. So dass man entsprechend auswählen kann. Bei adac_autoversicherung_ag möchte man z.B. nur ADAC draus machen, oder sowas. Selbiges für alle Spalten, das System soll dann lernen das man Anpassungen gemacht hat und das bei zukünftigen Dokumenten Berücksichtigen.
-[ ] es soll immer dry-run erfolgen und finales umbenennen dann immer über die webseite.
+[x] es soll immer dry-run erfolgen und finales umbenennen dann immer über die webseite.
 [ ] dienst der automatisch die inbox triggert und die webseite hostet.
 [ ] webseite muss gehärtet werden, ein login sollte aus ausreichend sein.
 [ ] config-file für alle defaults, port, login etc.
