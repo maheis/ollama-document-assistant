@@ -1225,7 +1225,8 @@ def find_latest_log_file(explicit: str, base_dir: Path) -> Path:
 
     latest = _latest_by_mtime(candidates)
     if latest is None:
-        raise FileNotFoundError("No organize_log JSONL found in ./logs or /tmp. Run organize.py --dry-run first.")
+        # Start with an empty state when no scan has run yet; sync picks up new logs later.
+        return (base_dir / "logs" / "organize_log.jsonl").resolve()
     return latest.resolve()
 
 
