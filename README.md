@@ -10,44 +10,13 @@ Wichtiges Prinzip:
 
 ## Quickstart (Debian)
 
-1) Repository klonen und in den Ordner wechseln
-
-```bash
-git clone https://github.com/maheis/ollama-document-assistant.git
-cd ollama-document-assistant
-```
-
-2) Komplettsetup ausfuehren
-
-```bash
-bash ./install.sh --full-setup
-```
-
-Alternative ohne manuelles Clone (Bootstrap via curl/wget):
-
 ```bash
 curl -fsSL https://raw.githubusercontent.com/maheis/ollama-document-assistant/main/install.sh | bash -s -- --full-setup
-```
-
-oder
-
-```bash
+# oder
 wget -qO- https://raw.githubusercontent.com/maheis/ollama-document-assistant/main/install.sh | bash -s -- --full-setup
 ```
 
-3) Service starten (falls nicht schon durch Install-Skript gestartet)
-
-```bash
-systemctl --user restart ollama-document-assistant.service
-```
-
-4) Weboberflaeche oeffnen
-
-```text
-http://127.0.0.1:8449
-```
-
-5) Passwort auslesen
+## Passwort auslesen
 
 ```bash
 head -n 1 ~/.local/share/ollama-document-assistant/.review_web_password
@@ -151,6 +120,7 @@ Hinweise:
 
 - kein `git clone`/Checkout im Skript
 - fuer apt-Schritte sind root/sudo Rechte noetig
+- wenn `install.sh` als einzelnes File (z. B. per wget/curl gespeichert) ausserhalb eines Repos ausgefuehrt wird, loescht es sich nach erfolgreicher Installation selbst
 
 ## Deinstallation
 

@@ -34,4 +34,4 @@
 [x] sinnvoller installationspfad
 [x] installation über wget/curl (install.sh ziehen und dann abfahrt mit dem rest inkl. checkout.)
 [x] uninstall
-[ ] install.sh soll sich danach löschen, wenn sie nicht im repo liegt.
+[x] install.sh soll sich danach löschen, wenn sie nicht im repo liegt.

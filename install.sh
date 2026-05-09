@@ -2,6 +2,10 @@
 set -euo pipefail
 
 SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+INSTALL_SCRIPT_PATH=""
+if [[ -f "${BASH_SOURCE[0]}" ]]; then
+  INSTALL_SCRIPT_PATH="$SOURCE_DIR/$(basename "${BASH_SOURCE[0]}")"
+fi
 DEFAULT_INSTALL_DIR="$HOME/.local/share/ollama-document-assistant"
 PROJECT_DIR="$DEFAULT_INSTALL_DIR"
 VENV_DIR="$PROJECT_DIR/.venv"
@@ -143,6 +147,28 @@ sync_project_files() {
   if [[ -f "$SOURCE_DIR/systemd/ollama-document-assistant.service" ]]; then
     cp "$SOURCE_DIR/systemd/ollama-document-assistant.service" "$PROJECT_DIR/systemd/ollama-document-assistant.service"
   fi
+}
+
+maybe_delete_bootstrap_installer() {
+  local script_path="$INSTALL_SCRIPT_PATH"
+  if [[ -z "$script_path" || ! -f "$script_path" ]]; then
+    return
+  fi
+
+  local script_dir
+  script_dir="$(cd "$(dirname "$script_path")" && pwd)"
+
+  # Keep installer if it belongs to a repository checkout.
+  if [[ -d "$script_dir/.git" ]] || has_project_sources "$script_dir"; then
+    return
+  fi
+
+  # Never remove the installer inside the active install directory.
+  if [[ "$script_path" == "$PROJECT_DIR/install.sh" ]]; then
+    return
+  fi
+
+  rm -f "$script_path" && echo "Removed transient installer script: $script_path"
 }
 
 write_user_service_unit() {
@@ -468,3 +494,5 @@ echo "Review URL: http://127.0.0.1:8449"
 
 echo "Current web password:"
 head -n 1 "$PROJECT_DIR/.review_web_password"
+
+maybe_delete_bootstrap_installer
