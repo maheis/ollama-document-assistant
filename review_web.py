@@ -775,7 +775,6 @@ HTML_PAGE = """<!doctype html>
                         <th>Titel</th>
                         <th>Datum</th>
                         <th>Zielvorschau</th>
-                        <th>Lernen</th>
                         <th>Aktion</th>
                     </tr>
                 </thead>
