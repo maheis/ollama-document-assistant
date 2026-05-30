@@ -1640,6 +1640,8 @@ async function doLogin(event) {
 
 
 class Handler(BaseHTTPRequestHandler):
+
+        # --- OLLAMA VERSION/UPDATE ---
         def _ollama_version_payload(self) -> dict[str, Any]:
             import shutil
             import subprocess
