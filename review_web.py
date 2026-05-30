@@ -888,9 +888,27 @@ function rowMarkup(row) {
             <div class=\"row-actions\">
                 <button onclick=\"saveRow('${esc(row.id)}')\" ${deployDisabled}>Speichern</button>
                 <button class=\"primary\" onclick=\"deployRow('${esc(row.id)}')\" ${deployDisabled}>Ausführen</button>
+                <button class=\"danger\" onclick=\"deleteRow('${esc(row.id)}')\">Löschen</button>
             </div>
         </td>
     </tr>`;
+// Einzellöschfunktion
+async function deleteRow(id) {
+    if (!confirm('Eintrag wirklich löschen?')) return;
+    status('Lösche Eintrag...');
+    const res = await fetch('/api/delete-entry', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id })
+    });
+    const payload = await res.json();
+    if (!res.ok || payload.ok === false) {
+        status(payload.error || 'Löschen fehlgeschlagen', 'err');
+        return;
+    }
+    status('Eintrag gelöscht.', 'ok');
+    await reloadData();
+}
 }
 
 function rowPayload(tr) {
