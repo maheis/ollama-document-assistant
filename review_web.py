@@ -692,7 +692,11 @@ HTML_PAGE = """<!doctype html>
         th:nth-child(2), td:nth-child(2) { width: 70px; max-width: 90px; }
         th:nth-child(3), td:nth-child(3) { width: 60px; max-width: 80px; }
         th:nth-child(10), td:nth-child(10) { width: 120px; max-width: 160px; }
-        th:nth-child(11), td:nth-child(11) { width: 140px; max-width: 180px; }
+        th:nth-child(11), td:nth-child(11) {
+            min-width: 170px;
+            max-width: 260px;
+            width: 13vw;
+        }
         td.col-file .mini {
             white-space: nowrap;
         }
