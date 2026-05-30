@@ -362,9 +362,9 @@ class ReviewStore:
             review_root = original_target.parent
             if "_review" in review_root.parts:
                 idx = review_root.parts.index("_review")
-                sorted_root = Path(*review_root.parts[:idx]) / "_sorted"
+                sorted_root = Path(*review_root.parts[:idx]) if idx > 0 else src.parent
             else:
-                sorted_root = src.parent / "_sorted"
+                sorted_root = src.parent
             return sorted_root, review_root
 
         parent = original_target.parent
@@ -373,7 +373,11 @@ class ReviewStore:
         else:
             sorted_root = parent
 
-        review_root = sorted_root.parent / "_review"
+        # Backward compatibility for historic targets under outbox/_sorted/YYYY.
+        if sorted_root.name == "_sorted":
+            review_root = sorted_root.parent / "_review"
+        else:
+            review_root = sorted_root / "_review"
         return sorted_root, review_root
 
     def _build_target(self, entry: dict[str, Any]) -> Path:
@@ -408,7 +412,7 @@ class ReviewStore:
 
         p = Path(raw)
         parts = p.parts
-        for marker in ("_sorted", "_review"):
+        for marker in ("_review", "_sorted", "outbox", "output"):
             if marker in parts:
                 idx = parts.index(marker)
                 return str(Path(*parts[idx:]))
@@ -422,7 +426,7 @@ class ReviewStore:
 
         p = Path(raw)
         parts = p.parts
-        for marker in ("inbox", "_review", "_sorted"):
+        for marker in ("inbox", "_review", "_sorted", "outbox", "output"):
             if marker in parts:
                 idx = parts.index(marker)
                 return str(Path(*parts[idx:]))

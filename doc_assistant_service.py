@@ -34,7 +34,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run review web UI and periodic organize dry-runs")
     parser.add_argument("--config-file", default="assistant_config.json", help="Path to shared JSON config file")
     parser.add_argument("--input", default=None, help="Inbox directory for organize.py")
-    parser.add_argument("--output", default=None, help="Output base directory for organize.py (_sorted/_review)")
+    parser.add_argument("--output", default=None, help="Outbox directory for organize.py (sorted files directly + _review)")
     parser.add_argument("--model", default=None, help="Ollama model for organize.py (optional)")
     parser.add_argument(
         "--schedule-mode",

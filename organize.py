@@ -89,7 +89,7 @@ class ExtractionResult:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Organize documents with a local Ollama model")
     parser.add_argument("--input", required=True, help="Input folder with documents")
-    parser.add_argument("--output-root", default="", help="Output base folder for _sorted/_review (empty = use input folder)")
+    parser.add_argument("--output-root", default="", help="Outbox base folder for sorted files and _review (empty = use input folder)")
     parser.add_argument("--model", default="qwen2.5:7b-instruct", help="Ollama model name")
     parser.add_argument("--ollama-url", default="http://127.0.0.1:11434", help="Ollama base URL")
     parser.add_argument("--ollama-timeout", type=int, default=1800, help="Ollama request timeout in seconds")
@@ -100,7 +100,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--lang", default="deu", help="OCR language for Tesseract")
     parser.add_argument("--min-confidence", type=float, default=0.85, help="Confidence threshold for auto-sort")
     parser.add_argument("--max-text-chars", type=int, default=6000, help="Max chars sent to the model")
-    parser.add_argument("--sorted-dir", default="_sorted", help="Folder for categorized files (relative to input)")
+    parser.add_argument("--sorted-dir", default="", help="Legacy subfolder for categorized files (default empty = output-root directly)")
     parser.add_argument("--review-dir", default="_review", help="Folder for low-confidence files (relative to input)")
     parser.add_argument("--log-file", default="logs/organize_log.jsonl", help="Path to JSONL log")
     parser.add_argument("--run-log-file", default="logs/organize_run.log", help="Path to plain-text run log (mirrors console output)")
@@ -957,7 +957,7 @@ def main() -> int:
     if not output_root.is_absolute():
         output_root = (Path.cwd() / output_root).resolve()
 
-    sorted_root = output_root / args.sorted_dir
+    sorted_root = output_root / args.sorted_dir if str(args.sorted_dir).strip() else output_root
     review_root = output_root / args.review_dir
     log_path = build_dated_log_path(args.log_file, date_prefix, "organize_log.jsonl")
     log_path.parent.mkdir(parents=True, exist_ok=True)
