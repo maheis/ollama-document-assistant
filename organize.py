@@ -108,6 +108,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--keyword-fallback-min-score", type=int, default=2, help="Minimum keyword matches to apply keyword fallback")
     parser.add_argument("--customer-number-hints-file", default="customer_number_hints.json", help="JSON file with labels/patterns for customer/reference number extraction")
     parser.add_argument("--field-aliases-file", default="field_aliases.json", help="JSON file with learned aliases for sender/category/customer_number/title")
+    parser.add_argument("--review-state-file", default="review_state.json", help="JSON file from review_web.py to skip files already in open review")
     parser.add_argument("--ocr-max-pages", type=int, default=3, help="Max pages to OCR when PDF has little text")
     parser.add_argument("--process-nice", type=int, default=5, help="Increase niceness to lower CPU priority")
     parser.add_argument("--max-cpu-threads", type=int, default=4, help="Limit CPU threads for OCR/BLAS libs (0 disables)")
@@ -894,6 +895,42 @@ def apply_runtime_limits(process_nice: int, max_cpu_threads: int) -> None:
             os.environ[env_key] = str(max_cpu_threads)
 
 
+def load_open_review_sources(state_file: Path) -> set[str]:
+    if not state_file.exists() or not state_file.is_file():
+        return set()
+
+    try:
+        payload = json.loads(state_file.read_text(encoding="utf-8"))
+    except Exception:
+        return set()
+
+    if not isinstance(payload, dict):
+        return set()
+
+    entries = payload.get("entries", {})
+    if not isinstance(entries, dict):
+        return set()
+
+    open_review_sources: set[str] = set()
+    for entry in entries.values():
+        if not isinstance(entry, dict):
+            continue
+        if not bool(entry.get("review", False)):
+            continue
+        status = str(entry.get("status", "pending") or "pending").strip().lower()
+        if status == "deployed":
+            continue
+        src = str(entry.get("source", "")).strip()
+        if not src:
+            continue
+        try:
+            open_review_sources.add(str(Path(src).expanduser().resolve()))
+        except Exception:
+            continue
+
+    return open_review_sources
+
+
 def main() -> int:
     args = parse_args()
     if args.apply:
@@ -945,6 +982,11 @@ def main() -> int:
         field_aliases_path = base_dir / field_aliases_path
     field_aliases = load_field_aliases(field_aliases_path)
 
+    review_state_path = Path(args.review_state_file).expanduser()
+    if not review_state_path.is_absolute():
+        review_state_path = base_dir / review_state_path
+    open_review_sources = load_open_review_sources(review_state_path)
+
     files = list(iter_input_files(input_dir, args.sorted_dir, args.review_dir))
     if not files:
         emit("[INFO] Keine verarbeitbaren Dateien gefunden.", run_log_path)
@@ -965,6 +1007,7 @@ def main() -> int:
         "review": 0,
         "errors": 0,
         "skipped_empty": 0,
+        "skipped_open_review": 0,
     }
 
     emit(f"[INFO] Modus: {'APPLY' if apply_changes else 'DRY-RUN'}", run_log_path)
@@ -988,6 +1031,10 @@ def main() -> int:
         run_log_path,
     )
     emit(
+        f"[INFO] review_state: {review_state_path} (open_review_sources={len(open_review_sources)})",
+        run_log_path,
+    )
+    emit(
         "[INFO] Limits: "
         f"nice=+{args.process_nice}, "
         f"max_cpu_threads={args.max_cpu_threads}, "
@@ -999,11 +1046,19 @@ def main() -> int:
 
     for src in files:
         stats["seen"] += 1
+        src_resolved = str(src.resolve())
         event = {
             "timestamp": datetime.now().isoformat(timespec="seconds"),
             "source": str(src),
             "mode": "apply" if apply_changes else "dry-run",
         }
+
+        if src_resolved in open_review_sources:
+            stats["skipped_open_review"] += 1
+            event.update({"status": "skipped", "reason": "open_review_entry"})
+            write_log(log_path, event)
+            emit(f"[SKIP] {src.name}: bereits in offener Review", run_log_path)
+            continue
 
         try:
             extracted = extract_text(src, ocr_lang=args.lang, ocr_max_pages=args.ocr_max_pages)
