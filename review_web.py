@@ -747,7 +747,53 @@ HTML_PAGE = """<!doctype html>
                 <button id=\"stop-scan-btn\" class=\"danger\" onclick=\"stopScan()\" disabled>Überprüfung stoppen</button>
                 <button class=\"secondary\" onclick=\"saveEdits()\">Änderungen speichern</button>
                 <button class=\"primary\" onclick=\"deployAll()\">Ausführung starten</button>
-                <button onclick="window.location.href='/config'">Konfiguration</button>
+                <button onclick=\"window.location.href='/config'\">Konfiguration</button>
+                <label class="filter-box">
+                    Status-Filter
+                    <select id="status-filter" onchange="applyFilter()">
+                        <option value="all">Alle</option>
+                        <option value="open" selected>Offen (pending/saved/missing)</option>
+                        <option value="pending">Pending</option>
+                        <option value="saved">Saved</option>
+                        <option value="missing">Missing</option>
+                        <option value="deployed">Ausgeführt</option>
+                    </select>
+                </label>
+            </div>
+            <div class=\"status\" id=\"status\"></div>
+        </div>
+
+        <div class=\"grid\">
+            <table>
+                <thead>
+                    <tr>
+                        <th class="col-file">Datei</th>
+                        <th>Status</th>
+                        <th>Conf</th>
+                        <th>Sender</th>
+                        <th>Kategorie</th>
+                        <th>Kunden-Nr</th>
+                        <th>Titel</th>
+                        <th>Datum</th>
+                        <th>Zielvorschau</th>
+                        <th>Lernen</th>
+                        <th>Aktion</th>
+                    </tr>
+                </thead>
+                <tbody id=\"rows\"></tbody>
+            </table>
+        </div>
+    </div>
+
+<script>
+let DATA = { rows: [], categories: [], value_memory: {} };
+let CURRENT_FILTER = 'open';
+
+function esc(v) {
+    return String(v ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;');
+}
+
+function status(text, cls = '') {
     const el = document.getElementById('status');
     el.textContent = text;
     el.className = 'status ' + cls;
@@ -800,67 +846,69 @@ function rowMarkup(row) {
     const statusLabel = uiStatusLabel(row.status);
     const deployDisabled = row.status === 'deployed' ? 'disabled' : '';
 
-
-    return `<tr data-id="${esc(row.id)}">
-        <td class="col-file">
-            <a class="filelink" target="_blank" href="/file?id=${encodeURIComponent(row.id)}">${esc(row.source_name)}</a>
-            <div class="mini">${esc(row.source_preview || row.source)}</div>
+    return `<tr data-id=\"${esc(row.id)}\">
+        <td class=\"col-file\">
+            <a class=\"filelink\" target=\"_blank\" href=\"/file?id=${encodeURIComponent(row.id)}\">${esc(row.source_name)}</a>
+            <div class=\"mini\">${esc(row.source_preview || row.source)}</div>
             <div>${badge}</div>
             ${missing}
         </td>
-        <td><span class="pill ${statusClass}">${esc(statusLabel)}</span></td>
+        <td><span class=\"pill ${statusClass}\">${esc(statusLabel)}</span></td>
         <td>${Number(row.confidence || 0).toFixed(2)}</td>
         <td>
-            <input list="sender-mem" name="sender" value="${esc(row.edited.sender || '')}" />
-            <div class="mini">LLM: ${esc(row.default.sender || '')}</div>
+            <input list=\"sender-mem\" name=\"sender\" value=\"${esc(row.edited.sender || '')}\" />
+            <div class=\"mini\">LLM: ${esc(row.default.sender || '')}</div>
         </td>
         <td>
-            <select name="category">${categoryOptions(row.edited.category || 'SONSTIGES')}</select>
-            <div class="mini">LLM: ${esc(row.default.category || '')}</div>
+            <select name=\"category\">${categoryOptions(row.edited.category || 'SONSTIGES')}</select>
+            <div class=\"mini\">LLM: ${esc(row.default.category || '')}</div>
         </td>
         <td>
-            <input list="customer_number-mem" name="customer_number" value="${esc(row.edited.customer_number || '')}" />
-            <div class="mini">LLM: ${esc(row.default.customer_number || '')}</div>
+            <input list=\"customer_number-mem\" name=\"customer_number\" value=\"${esc(row.edited.customer_number || '')}\" />
+            <div class=\"mini\">LLM: ${esc(row.default.customer_number || '')}</div>
         </td>
         <td>
-            <input list="title-mem" name="title" value="${esc(row.edited.title || '')}" />
-            <div class="mini">LLM: ${esc(row.default.title || '')}</div>
+            <input list=\"title-mem\" name=\"title\" value=\"${esc(row.edited.title || '')}\" />
+            <div class=\"mini\">LLM: ${esc(row.default.title || '')}</div>
         </td>
         <td>
-            <input name="date" value="${esc(row.edited.date || '')}" placeholder="YYYY-MM-DD" />
-            <div class="mini">LLM: ${esc(row.default.date || '')}</div>
+            <input name=\"date\" value=\"${esc(row.edited.date || '')}\" placeholder=\"YYYY-MM-DD\" />
+            <div class=\"mini\">LLM: ${esc(row.default.date || '')}</div>
         </td>
-        <td class="mini">${esc(row.target_preview || '')}</td>
+        <td class=\"mini\">${esc(row.target_preview || '')}</td>
         <td>
-            <div class="row-actions">
-                <button onclick="saveRow('${esc(row.id)}')" ${deployDisabled}>Speichern</button>
-                <button class="primary" onclick="deployRow('${esc(row.id)}')" ${deployDisabled}>Ausführen</button>
-                <button class="danger" onclick="deleteRow('${esc(row.id)}')">Löschen</button>
+            <div class=\"learn\">
+                <label><input type=\"checkbox\" name=\"learn_sender\" /> Sender</label>
+                <label><input type=\"checkbox\" name=\"learn_category\" /> Kategorie</label>
+                <label><input type=\"checkbox\" name=\"learn_customer_number\" /> Kunden-Nr</label>
+                <label><input type=\"checkbox\" name=\"learn_title\" /> Titel</label>
+            </div>
+        </td>
+        <td>
+            <div class=\"row-actions\">
+                <button onclick=\"saveRow('${esc(row.id)}')\" ${deployDisabled}>Speichern</button>
+                <button class=\"primary\" onclick=\"deployRow('${esc(row.id)}')\" ${deployDisabled}>Ausführen</button>
             </div>
         </td>
     </tr>`;
-
 }
 
 function rowPayload(tr) {
-    // Automatisch lernen, wenn edited != default
-    const id = tr.dataset.id;
-    const sender = tr.querySelector('[name="sender"]').value;
-    const category = tr.querySelector('[name="category"]').value;
-    const customer_number = tr.querySelector('[name="customer_number"]').value;
-    const title = tr.querySelector('[name="title"]').value;
-    const date = tr.querySelector('[name="date"]').value;
-    const row = DATA.rows.find(r => r.id === id) || { default: {} };
-    const learn = {
-        sender: sender !== (row.default.sender || ""),
-        category: category !== (row.default.category || ""),
-        customer_number: customer_number !== (row.default.customer_number || ""),
-        title: title !== (row.default.title || ""),
-    };
     return {
-        id,
-        edited: { sender, category, customer_number, title, date },
-        learn
+        id: tr.dataset.id,
+        edited: {
+            sender: tr.querySelector('[name="sender"]').value,
+            category: tr.querySelector('[name="category"]').value,
+            customer_number: tr.querySelector('[name="customer_number"]').value,
+            title: tr.querySelector('[name="title"]').value,
+            date: tr.querySelector('[name="date"]').value,
+        },
+        learn: {
+            sender: tr.querySelector('[name="learn_sender"]').checked,
+            category: tr.querySelector('[name="learn_category"]').checked,
+            customer_number: tr.querySelector('[name="learn_customer_number"]').checked,
+            title: tr.querySelector('[name="learn_title"]').checked,
+        }
     };
 }
 
@@ -997,23 +1045,22 @@ async function saveEdits() {
     await reloadData();
 }
 
-
-async function deleteRow(id) {
-    if (!confirm('Eintrag wirklich löschen?')) return;
-    status('Lösche Eintrag...');
-    const res = await fetch('/api/delete-entry', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id })
-    });
-    const payload = await res.json();
-    if (!res.ok || payload.ok === false) {
-        status(payload.error || 'Löschen fehlgeschlagen', 'err');
+async function saveRow(id) {
+    const tr = findRow(id);
+    if (!tr) {
+        status('Zeile nicht gefunden.');
         return;
     }
-    status('Eintrag gelöscht.', 'ok');
+    const res = await fetch('/api/save-edits', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rows: [rowPayload(tr)] })
+    });
+    const payload = await res.json();
+    status(`Zeile gespeichert: ${payload.updated}`);
     await reloadData();
 }
+
 async function deployAll() {
     const rows = collectRows();
     if (!rows.length) {
@@ -1151,50 +1198,45 @@ CONFIG_PAGE = """<!doctype html>
             <h1>Konfiguration</h1>
             <p class=\"meta\" id=\"meta\"></p>
 
+            <div class=\"section\">
+                <h2>In-/Outbox</h2>
+                <div class=\"grid\">
+                    <div class=\"field wide\">
+                        <label for=\"input\">Inbox (service.input)</label>
+                        <input id=\"input\" placeholder=\"./inbox\" />
+                    </div>
 
-            <div class="section">
-                <h2>Ollama</h2>
-                <div class="grid">
-                    <div class="field">
-                        <label for="ollama-timeout">Ollama Timeout Sekunden</label>
-                        <input id="ollama-timeout" type="number" min="1" step="1" placeholder="1800" />
+                    <div class=\"field wide\">
+                        <label for=\"output\">Outbox (service.output)</label>
+                        <input id=\"output\" placeholder=\"./output\" />
                     </div>
-                    <div class="field">
-                        <label for="ollama-retries">Ollama Retries</label>
-                        <input id="ollama-retries" type="number" min="0" step="1" placeholder="0" />
-                    </div>
-                    <div class="field">
-                        <label for="max-text-chars">Max. Textzeichen pro Anfrage</label>
-                        <input id="max-text-chars" type="number" min="100" step="100" placeholder="6000" />
-                    </div>
-                    <div class="field">
-                        <label for="process-nice">Process Nice</label>
-                        <input id="process-nice" type="number" min="0" step="1" placeholder="5" />
-                    </div>
-                    <div class="field">
-                        <label for="max-cpu-threads">Max CPU Threads (0 = kein Limit)</label>
-                        <input id="max-cpu-threads" type="number" min="0" step="1" placeholder="4" />
-                    </div>
-                    <div class="field">
-                        <label for="ollama-num-thread">Ollama Num Thread (0 = Default)</label>
-                        <input id="ollama-num-thread" type="number" min="0" step="1" placeholder="4" />
-                    </div>
-                    <div class="field">
-                        <label for="sleep-between-files">Pause zwischen Dateien (Sekunden)</label>
-                        <input id="sleep-between-files" type="number" min="0" step="0.1" placeholder="0.4" />
-                    </div>
-                </div>
-                <div class="grid">
-                    <div class="field wide">
-                        <label for="ollama-version-info">Ollama-Version</label>
-                        <input id="ollama-version-info" readonly value="Noch nicht geprüft" />
-                    </div>
-                </div>
-                <div class="actions">
-                    <button onclick="checkOllamaVersion()" type="button">Ollama-Version prüfen</button>
-                    <button id="run-ollama-update-btn" class="primary" onclick="runOllamaUpdate()" type="button" disabled>Ollama Update durchführen</button>
                 </div>
             </div>
+
+            <div class=\"section\">
+                <h2>Ausführungplan</h2>
+                <div class=\"grid stack\">
+                    <div class=\"field\">
+                        <label for=\"model\">Modell (service.model)</label>
+                        <input id=\"model\" placeholder=\"qwen2.5:7b-instruct\" />
+                    </div>
+
+                    <div class=\"field\">
+                        <label for=\"schedule-mode\">Scheduler-Modus (service.schedule_mode)</label>
+                        <select id=\"schedule-mode\">
+                            <option value=\"interval\">interval</option>
+                            <option value=\"inbox-trigger\">inbox-trigger</option>
+                            <option value=\"daily\">daily</option>
+                        </select>
+                    </div>
+
+                    <div class=\"field\">
+                        <label for=\"interval\">Scan-Intervall Sekunden (service.interval_seconds)</label>
+                        <input id=\"interval\" type=\"number\" min=\"30\" step=\"1\" placeholder=\"300\" />
+                    </div>
+
+                    <div class=\"field\">
+                        <label for=\"inbox-poll\">Inbox Poll Sekunden (service.inbox_poll_seconds)</label>
                         <input id=\"inbox-poll\" type=\"number\" min=\"1\" step=\"1\" placeholder=\"2\" />
                     </div>
 
@@ -1316,38 +1358,19 @@ function setUpdateUI(payload) {
     btn.disabled = !payload.available;
 }
 
-
-async function checkOllamaVersion() {
-    const info = byId('ollama-version-info');
-    const btn = byId('run-ollama-update-btn');
-    if (info) info.value = 'Prüfe Ollama-Version...';
-    btn.disabled = true;
-    const res = await fetch('/api/ollama-version');
+async function checkForUpdate() {
+    const info = byId('update-info');
+    if (info) {
+        info.value = 'Prüfe auf Updates...';
+    }
+    const res = await fetch('/api/update-status');
     const payload = await res.json();
+    setUpdateUI(payload);
     if (!res.ok) {
-        info.value = payload.error || 'Fehler bei Prüfung';
+        status(payload.error || payload.message || 'Update-Prüfung fehlgeschlagen.', 'err');
         return;
     }
-    info.value = payload.message;
-    btn.disabled = !payload.update_available;
-}
-
-async function runOllamaUpdate() {
-    const btn = byId('run-ollama-update-btn');
-    btn.disabled = true;
-    const info = byId('ollama-version-info');
-    info.value = 'Führe Ollama-Update durch...';
-    const res = await fetch('/api/ollama-update', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({})
-    });
-    const payload = await res.json();
-    if (!res.ok || payload.ok === false) {
-        info.value = payload.message || payload.error || 'Update fehlgeschlagen';
-        return;
-    }
-    info.value = payload.message || 'Ollama wurde aktualisiert.';
+    status(payload.message || 'Update-Status geprüft.', payload.available ? 'warn' : 'ok');
 }
 
 async function runUpdate() {
@@ -1584,75 +1607,6 @@ async function doLogin(event) {
 
 
 class Handler(BaseHTTPRequestHandler):
-    def _delete_entry(self, entry_id: str) -> dict[str, Any]:
-        with self.store.lock:
-            if entry_id in self.store.state["entries"]:
-                del self.store.state["entries"][entry_id]
-                self.store._save_state()
-                return {"ok": True}
-            return {"ok": False, "error": "Eintrag nicht gefunden"}
-        if parsed.path == "/api/delete-entry":
-            entry_id = str(payload.get("id", "")).strip()
-            self._json_response(self._delete_entry(entry_id))
-            return
-
-        # --- OLLAMA VERSION/UPDATE ---
-
-    def _ollama_version_payload(self) -> dict[str, Any]:
-        import shutil
-        import subprocess
-        import re
-        ollama_path = shutil.which("ollama")
-        if not ollama_path:
-            return {"ok": False, "error": "Ollama nicht installiert oder nicht im $PATH."}
-        try:
-            proc = subprocess.run([ollama_path, "--version"], capture_output=True, text=True, timeout=10)
-            if proc.returncode != 0:
-                return {"ok": False, "error": "Ollama-Version konnte nicht ermittelt werden."}
-            installed = proc.stdout.strip()
-        except Exception as exc:
-            return {"ok": False, "error": f"Fehler: {exc}"}
-        # Hole neueste Version von ollama.com
-        try:
-            import urllib.request
-            html = urllib.request.urlopen("https://ollama.com/download").read().decode("utf-8")
-            m = re.search(r'Ollama ([0-9]+\\.[0-9]+\\.[0-9]+)', html)
-            latest = m.group(1) if m else None
-        except Exception:
-            latest = None
-        update_available = False
-        msg = f"Installiert: {installed}"
-        if latest:
-            msg += f" | Neueste: {latest}"
-            update_available = installed != latest
-        else:
-            msg += " | Neueste Version nicht ermittelbar"
-        if update_available:
-            msg += " | Update verfügbar!"
-        else:
-            msg += " | Bereits aktuell."
-        return {"ok": True, "installed": installed, "latest": latest, "update_available": update_available, "message": msg}
-
-    def _ollama_update(self) -> dict[str, Any]:
-        import shutil
-        import subprocess
-        ollama_path = shutil.which("ollama")
-        if not ollama_path:
-            return {"ok": False, "error": "Ollama nicht installiert oder nicht im $PATH."}
-        try:
-            proc = subprocess.run(["sh", "-c", "curl -fsSL https://ollama.com/install.sh | sh"], capture_output=True, text=True, timeout=180)
-            if proc.returncode != 0:
-                return {"ok": False, "error": "Update fehlgeschlagen", "details": proc.stderr or proc.stdout}
-            return {"ok": True, "message": "Ollama wurde aktualisiert."}
-        except Exception as exc:
-            return {"ok": False, "error": f"Update-Fehler: {exc}"}
-            if parsed.path == "/api/ollama-version":
-                self._json_response(self._ollama_version_payload())
-                return
-
-            if parsed.path == "/api/ollama-update":
-                self._json_response(self._ollama_update())
-                return
     store: ReviewStore
     auth: PasswordAuth
     config_path: Path
