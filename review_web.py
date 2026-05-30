@@ -400,6 +400,34 @@ class ReviewStore:
 
         return unique_path(base_target)
 
+    def _format_target_preview(self, target_preview: str) -> str:
+        raw = str(target_preview or "").strip()
+        if not raw:
+            return ""
+
+        p = Path(raw)
+        parts = p.parts
+        for marker in ("_sorted", "_review"):
+            if marker in parts:
+                idx = parts.index(marker)
+                return str(Path(*parts[idx:]))
+
+        return raw
+
+    def _format_source_preview(self, source_path: str) -> str:
+        raw = str(source_path or "").strip()
+        if not raw:
+            return ""
+
+        p = Path(raw)
+        parts = p.parts
+        for marker in ("inbox", "_review", "_sorted"):
+            if marker in parts:
+                idx = parts.index(marker)
+                return str(Path(*parts[idx:]))
+
+        return raw
+
     def list_entries(self) -> dict[str, Any]:
         with self.lock:
             self._sync_from_log()
@@ -410,10 +438,12 @@ class ReviewStore:
                 target_preview = str(entry.get("deployed_target", "")).strip()
                 if status_value != "deployed" or not target_preview:
                     target_preview = str(self._build_target(entry))
+                target_preview = self._format_target_preview(target_preview)
                 row = {
                     "id": entry["id"],
                     "status": status_value,
                     "source": str(source),
+                    "source_preview": self._format_source_preview(str(source)),
                     "source_name": source.name,
                     "source_exists": source.exists(),
                     "confidence": float(entry.get("confidence", 0.0) or 0.0),
@@ -646,6 +676,17 @@ HTML_PAGE = """<!doctype html>
         th, td { border-bottom: 1px solid var(--line); padding: 8px; text-align: left; vertical-align: top; }
         th { position: sticky; top: 0; background: #20283a; font-size: 12px; text-transform: uppercase; letter-spacing: 0.3px; }
         tr:hover td { background: #232c40; }
+        th.col-file, td.col-file {
+            width: 1%;
+            white-space: nowrap;
+        }
+        td.col-file .mini {
+            white-space: nowrap;
+        }
+        td.col-file a.filelink {
+            display: inline-block;
+            white-space: nowrap;
+        }
         input, select {
             width: 100%;
             border: 1px solid #3a445f;
@@ -712,7 +753,7 @@ HTML_PAGE = """<!doctype html>
             <table>
                 <thead>
                     <tr>
-                        <th>Datei</th>
+                        <th class="col-file">Datei</th>
                         <th>Status</th>
                         <th>Conf</th>
                         <th>Sender</th>
@@ -783,9 +824,9 @@ function rowMarkup(row) {
     const deployDisabled = row.status === 'deployed' ? 'disabled' : '';
 
     return `<tr data-id=\"${esc(row.id)}\">
-        <td>
+        <td class=\"col-file\">
             <a class=\"filelink\" target=\"_blank\" href=\"/file?id=${encodeURIComponent(row.id)}\">${esc(row.source_name)}</a>
-            <div class=\"mini\">${esc(row.source)}</div>
+            <div class=\"mini\">${esc(row.source_preview || row.source)}</div>
             <div>${badge}</div>
             ${missing}
         </td>
