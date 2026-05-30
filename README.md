@@ -310,6 +310,8 @@ Hinweis zur Web-Konfigurationsseite:
 
 - speichert in `assistant_config.json` (service.input/output/model/schedule_mode/interval_seconds/daily_time/inbox_poll_seconds)
 - Web-Passwort kann dort ebenfalls geaendert werden (wird in die Passwortdatei geschrieben)
+- Update kann dort geprueft und gestartet werden (`Auf Update pruefen`, `Update durchfuehren`)
+- `Update durchfuehren` ist nur aktiv, wenn wirklich ein neuer Stand im Git-Remote verfuegbar ist
 - danach Dienst neu starten, damit die neuen Werte aktiv werden:
 
 ```bash

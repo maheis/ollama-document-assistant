@@ -1145,6 +1145,20 @@ CONFIG_PAGE = """<!doctype html>
                 </div>
             </div>
 
+            <div class=\"section\">
+                <h2>Update</h2>
+                <div class=\"grid\">
+                    <div class=\"field wide\">
+                        <label for=\"update-info\">Repository-Status</label>
+                        <input id=\"update-info\" readonly value=\"Noch nicht geprueft\" />
+                    </div>
+                </div>
+                <div class=\"actions\">
+                    <button onclick=\"checkForUpdate()\">Auf Update pruefen</button>
+                    <button id=\"run-update-btn\" class=\"primary\" onclick=\"runUpdate()\" disabled>Update durchfuehren</button>
+                </div>
+            </div>
+
             <div class=\"actions\">
                 <button onclick=\"loadConfig()\">Neu laden</button>
                 <button class=\"primary\" onclick=\"saveConfig()\">Speichern</button>
@@ -1164,6 +1178,69 @@ function status(text, cls = '') {
 
 function byId(id) {
     return document.getElementById(id);
+}
+
+function setUpdateUI(payload) {
+    const info = byId('update-info');
+    const btn = byId('run-update-btn');
+    if (!info || !btn) {
+        return;
+    }
+    if (!payload || payload.supported === false) {
+        info.value = payload?.message || 'Update-Pruefung nicht verfuegbar';
+        btn.disabled = true;
+        return;
+    }
+
+    const behind = Number(payload.behind || 0);
+    const ahead = Number(payload.ahead || 0);
+    const upstream = payload.upstream || '-';
+    const text = `${payload.message || 'Status unbekannt'} | Upstream=${upstream} | behind=${behind} | ahead=${ahead}`;
+    info.value = text;
+    btn.disabled = !payload.available;
+}
+
+async function checkForUpdate() {
+    const info = byId('update-info');
+    if (info) {
+        info.value = 'Pruefe auf Updates...';
+    }
+    const res = await fetch('/api/update-status');
+    const payload = await res.json();
+    setUpdateUI(payload);
+    if (!res.ok) {
+        status(payload.error || payload.message || 'Update-Pruefung fehlgeschlagen.', 'err');
+        return;
+    }
+    status(payload.message || 'Update-Status geprueft.', payload.available ? 'warn' : 'ok');
+}
+
+async function runUpdate() {
+    const btn = byId('run-update-btn');
+    if (btn) {
+        btn.disabled = true;
+    }
+    status('Fuehre Update durch...');
+    const res = await fetch('/api/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+    });
+    const payload = await res.json();
+    setUpdateUI(payload);
+
+    if (!res.ok || payload.ok === false) {
+        const details = payload.details ? ` (${payload.details})` : '';
+        status((payload.message || payload.error || 'Update fehlgeschlagen') + details, 'err');
+        return;
+    }
+
+    if (payload.updated) {
+        status('Update erfolgreich. Bitte Dienst neu starten.', 'ok');
+    } else {
+        status(payload.message || 'Bereits aktuell.', 'ok');
+    }
+    await checkForUpdate();
 }
 
 async function loadConfig() {
@@ -1188,6 +1265,7 @@ async function loadConfig() {
     byId('new-password-confirm').value = '';
     byId('meta').textContent = `Config-Datei: ${payload.config_path} | Passwortdatei: ${payload.auth_password_file || '-'}`;
     status('Konfiguration geladen.', 'ok');
+    await checkForUpdate();
 }
 
 async function saveConfig() {
@@ -1329,6 +1407,7 @@ class Handler(BaseHTTPRequestHandler):
     scan_proc: Optional[subprocess.Popen[bytes]] = None
     scan_last_exit_code: Optional[int] = None
     scan_last_finished_at: float = 0.0
+    update_lock = threading.Lock()
 
     def log_message(self, fmt: str, *args: object) -> None:
         return
@@ -1429,6 +1508,93 @@ class Handler(BaseHTTPRequestHandler):
             p = self.config_path.parent / p
         return p.resolve()
 
+    def _resolve_project_dir(self, config: dict[str, Any]) -> Path:
+        service = get_section(config, "service")
+        project_dir_raw = str(service.get("project_dir", "")).strip()
+        project_dir = Path(project_dir_raw).expanduser() if project_dir_raw else self.config_path.parent
+        if not project_dir.is_absolute():
+            project_dir = self.config_path.parent / project_dir
+        return project_dir.resolve()
+
+    def _run_git(self, project_dir: Path, args: list[str], timeout: int = 30) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            ["git", "-C", str(project_dir)] + args,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+
+    def _update_status_payload(self) -> dict[str, Any]:
+        config, load_errors = self._load_runtime_config()
+        if load_errors:
+            return {"supported": False, "available": False, "error": "config_load_failed", "errors": load_errors}
+
+        project_dir = self._resolve_project_dir(config)
+        if shutil.which("git") is None:
+            return {
+                "supported": False,
+                "available": False,
+                "message": "git nicht gefunden",
+                "project_dir": str(project_dir),
+            }
+
+        probe = self._run_git(project_dir, ["rev-parse", "--is-inside-work-tree"])
+        if probe.returncode != 0 or probe.stdout.strip() != "true":
+            return {
+                "supported": False,
+                "available": False,
+                "message": "Kein Git-Repository im Projektordner",
+                "project_dir": str(project_dir),
+            }
+
+        fetch = self._run_git(project_dir, ["fetch", "--prune"], timeout=60)
+        if fetch.returncode != 0:
+            return {
+                "supported": True,
+                "available": False,
+                "message": "Fetch fehlgeschlagen",
+                "project_dir": str(project_dir),
+                "details": (fetch.stderr or fetch.stdout).strip(),
+            }
+
+        upstream = self._run_git(project_dir, ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"])
+        if upstream.returncode != 0:
+            return {
+                "supported": True,
+                "available": False,
+                "message": "Kein Upstream-Branch konfiguriert",
+                "project_dir": str(project_dir),
+            }
+
+        upstream_name = upstream.stdout.strip()
+        counts = self._run_git(project_dir, ["rev-list", "--left-right", "--count", "HEAD...@{u}"])
+        if counts.returncode != 0:
+            return {
+                "supported": True,
+                "available": False,
+                "message": "Vergleich mit Upstream fehlgeschlagen",
+                "project_dir": str(project_dir),
+                "upstream": upstream_name,
+                "details": (counts.stderr or counts.stdout).strip(),
+            }
+
+        parts = counts.stdout.strip().split()
+        ahead = int(parts[0]) if len(parts) > 0 and parts[0].isdigit() else 0
+        behind = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 0
+        available = behind > 0
+        message = "Update verfuegbar" if available else "Bereits aktuell"
+
+        return {
+            "supported": True,
+            "available": available,
+            "message": message,
+            "project_dir": str(project_dir),
+            "upstream": upstream_name,
+            "ahead": ahead,
+            "behind": behind,
+        }
+
     def _build_scan_command(self, config: dict[str, Any]) -> tuple[list[str], Path]:
         service = get_section(config, "service")
         project_dir_raw = str(service.get("project_dir", "")).strip()
@@ -1521,6 +1687,12 @@ class Handler(BaseHTTPRequestHandler):
             if not self._require_auth(is_api=True):
                 return
             self._json_response(self._scan_status_payload())
+            return
+
+        if parsed.path == "/api/update-status":
+            if not self._require_auth(is_api=True):
+                return
+            self._json_response(self._update_status_payload())
             return
 
         if parsed.path == "/api/config":
@@ -1651,6 +1823,42 @@ class Handler(BaseHTTPRequestHandler):
                 self.scan_proc = proc
 
             self._json_response({"ok": True, "running": False, "pid": proc.pid})
+            return
+
+        if parsed.path == "/api/update":
+            with self.update_lock:
+                status_payload = self._update_status_payload()
+                if not status_payload.get("supported"):
+                    self._json_response(status_payload, status=400)
+                    return
+                if not status_payload.get("available"):
+                    self._json_response({"ok": True, "updated": False, **status_payload})
+                    return
+
+                project_dir = Path(str(status_payload.get("project_dir", "")).strip() or self.config_path.parent)
+                pull = self._run_git(project_dir, ["pull", "--ff-only"], timeout=120)
+                if pull.returncode != 0:
+                    self._json_response(
+                        {
+                            "ok": False,
+                            "updated": False,
+                            "error": "update_failed",
+                            "message": "Update konnte nicht durchgefuehrt werden",
+                            "details": (pull.stderr or pull.stdout).strip(),
+                        },
+                        status=500,
+                    )
+                    return
+
+                self._json_response(
+                    {
+                        "ok": True,
+                        "updated": True,
+                        "message": "Update erfolgreich eingespielt",
+                        "restart_required": True,
+                        "details": pull.stdout.strip(),
+                    }
+                )
             return
 
         if parsed.path == "/api/config":
