@@ -1642,17 +1642,24 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         parsed = urlparse(self.path)
         if parsed.path == "/api/reset-review-state":
-            # Vollständiger Reset: review_state.json leeren und alle Logfiles löschen (Projektordner + Standarddatenverzeichnis)
+            # Reset: review_state.json leeren und alle relevanten Logfiles löschen (wie install.sh)
             try:
                 import os
+                # Dynamische Pfade aus Konfiguration
                 state_file = self.store.paths.state_file
-                logs_dirs = [state_file.parent / "logs"]
-                # Standarddatenverzeichnis ergänzen
-                default_data_dir = Path(os.path.expanduser("~/.local/share/ollama-document-assistant/logs"))
-                if default_data_dir not in logs_dirs:
-                    logs_dirs.append(default_data_dir)
-                empty = {"entries": {}, "value_memory": {"sender": [], "category": [], "customer_number": [], "title": []}}
+                log_file = self.store.paths.log_file
+                logs_dirs = set()
+                # logs/-Verzeichnis im Projektordner
+                logs_dirs.add((log_file.parent / "logs").resolve())
+                # logs/-Verzeichnis im Standarddatenverzeichnis
+                default_data_dir = Path(os.path.expanduser("~/.local/share/ollama-document-assistant/logs")).resolve()
+                logs_dirs.add(default_data_dir)
+                # logs/-Verzeichnis relativ zum state_file
+                logs_dirs.add((state_file.parent / "logs").resolve())
+                # logs/-Verzeichnis relativ zum log_file
+                logs_dirs.add((log_file.parent).resolve())
                 # review_state.json leeren
+                empty = {"entries": {}, "value_memory": {"sender": [], "category": [], "customer_number": [], "title": []}}
                 with open(state_file, "w", encoding="utf-8") as f:
                     json.dump(empty, f, ensure_ascii=False, indent=2)
                 # Logfiles in allen relevanten logs/-Verzeichnissen löschen
