@@ -1658,10 +1658,12 @@ class Handler(BaseHTTPRequestHandler):
                 logs_dirs.add((state_file.parent / "logs").resolve())
                 # logs/-Verzeichnis relativ zum log_file
                 logs_dirs.add((log_file.parent).resolve())
-                # review_state.json leeren
+                # review_state.json leeren und In-Memory-Cache resetten
                 empty = {"entries": {}, "value_memory": {"sender": [], "category": [], "customer_number": [], "title": []}}
                 with open(state_file, "w", encoding="utf-8") as f:
                     json.dump(empty, f, ensure_ascii=False, indent=2)
+                self.store.state = empty
+                self.store.aliases = {"sender": {}, "category": {}, "customer_number": {}, "title": {}}
                 # Logfiles in allen relevanten logs/-Verzeichnissen löschen
                 deleted_logs = []
                 for logs_dir in logs_dirs:
