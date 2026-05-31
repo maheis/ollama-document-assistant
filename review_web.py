@@ -961,8 +961,8 @@ function rowMarkup(row) {
                 <button class="danger" onclick="deleteRow('${esc(row.id)}')">Löschen</button>
             </div>
         </td>
-    </tr>`;
-    </tr>`;
+    </tr>;
+    </tr>;
         <td class=\"col-file\">
             <a class=\"filelink\" target=\"_blank\" href=\"/file?id=${encodeURIComponent(row.id)}\">${esc(row.source_name)}</a>
             <div class=\"mini\">${esc(row.source_preview || row.source)}</div>
