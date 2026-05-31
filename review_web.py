@@ -734,17 +734,30 @@ HTML_PAGE = """<!doctype html>
             overflow: auto;
             max-height: calc(100vh - 190px);
         }
-        table { width: 100%; border-collapse: collapse; min-width: 1450px; table-layout: fixed; }
-        th, td { border-bottom: 1px solid var(--line); padding: 8px; text-align: left; vertical-align: top; overflow: hidden; text-overflow: ellipsis; }
+        table { width: 100%; border-collapse: collapse; min-width: 1450px; table-layout: auto; }
+        th, td { border-bottom: 1px solid var(--line); padding: 8px; text-align: left; vertical-align: top; }
         th { position: sticky; top: 0; background: #20283a; font-size: 12px; text-transform: uppercase; letter-spacing: 0.3px; }
         tr:hover td { background: #232c40; }
-        th.col-file, td.col-file { width: 120px; max-width: 180px; white-space: nowrap; }
+        th.col-file, td.col-file {
+            white-space: normal;
+            width: auto;
+            max-width: none;
+            min-width: 180px;
+            word-break: break-all;
+        }
         th:nth-child(4), td:nth-child(4) { min-width: 160px; max-width: 320px; width: 18vw; } /* Sender */
         th:nth-child(5), td:nth-child(5) { min-width: 120px; max-width: 200px; width: 10vw; } /* Kategorie */
         th:nth-child(6), td:nth-child(6) { min-width: 110px; max-width: 180px; width: 9vw; } /* Kunden-Nr */
         th:nth-child(7), td:nth-child(7) { min-width: 180px; max-width: 340px; width: 20vw; } /* Titel */
         th:nth-child(8), td:nth-child(8) { min-width: 110px; max-width: 160px; width: 8vw; } /* Datum */
-        th:nth-child(9), td:nth-child(9) { min-width: 180px; max-width: 340px; width: 18vw; } /* Zielvorschau */
+        th:nth-child(6), td:nth-child(6),
+        th:nth-child(9), td:nth-child(9) {
+            white-space: normal;
+            width: auto;
+            max-width: none;
+            min-width: 180px;
+            word-break: break-all;
+        }
         th:nth-child(2), td:nth-child(2) { width: 70px; max-width: 90px; }
         th:nth-child(3), td:nth-child(3) { width: 60px; max-width: 80px; }
         th:nth-child(10), td:nth-child(10) { width: 120px; max-width: 160px; }
