@@ -45,6 +45,10 @@ def oda_debug(msg: str):
 from typing import Any, Optional
 from urllib.parse import parse_qs, urlparse
 
+# Logger-Test: Wird review_web.py wirklich ausgeführt?
+with open("oda_debug.log", "a", encoding="utf-8") as f:
+    f.write("[TEST] review_web.py gestartet\n")
+
 from assistant_config import get_section, load_config, pick, validate_config
 
 
@@ -810,7 +814,7 @@ HTML_PAGE = """<!doctype html>
             <h1>Dokumente zur Prüfung</h1>
             <div class=\"meta\" id=\"meta\"></div>
             <div class="activity idle" id="activity-indicator">Systemstatus: Leerlauf</div>
-            <div class="actions">
+            <div class=\"actions\">
                 <button class="primary" onclick="deployAll()">Ausführung starten</button>
                 <button onclick="window.location.href='/config'">Konfiguration</button>
                 <label class="filter-box">
@@ -1197,7 +1201,7 @@ CONFIG_PAGE = """<!doctype html>
         * { box-sizing: border-box; }
         body {
             margin: 0;
-            font-family: \"IBM Plex Sans\", \"Segoe UI\", sans-serif;
+            font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
             color: var(--ink);
             background: radial-gradient(circle at top right, #20263a 0%, var(--bg) 42%), var(--bg2);
         }
