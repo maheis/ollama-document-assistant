@@ -970,6 +970,8 @@ async function deleteRow(id) {
     status('Eintrag gelöscht.', 'ok');
     await reloadData();
 }
+window.deleteRow = deleteRow;
+
 }
 
 function rowPayload(tr) {
