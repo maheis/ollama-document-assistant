@@ -1449,7 +1449,7 @@ async function restartService() {
     }
     status(payload.message || 'Dienst wurde neu gestartet. Seite wird neu geladen...', 'ok');
     setTimeout(() => {
-        window.location.href = '/';
+        window.location.replace('/');
     }, 1200);
 }
 
