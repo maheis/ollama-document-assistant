@@ -742,15 +742,24 @@ HTML_PAGE = """<!doctype html>
 <body>
     <div class=\"wrap\">
         <div class=\"top\">
+
             <h1>Dokumente zur Prüfung</h1>
             <div class=\"meta\" id=\"meta\"></div>
             <div class="activity idle" id="activity-indicator">Systemstatus: Leerlauf</div>
-
-            </div>
-
-
-
-                <!-- Mainpage-Buttons entfernt: Deploy, Konfiguration, Status-Filter -->
+            <div class="actions">
+                <button class="primary" onclick="deployAll()">Ausführung starten</button>
+                <button onclick="window.location.href='/config'">Konfiguration</button>
+                <label class="filter-box">
+                    Status-Filter
+                    <select id="status-filter" onchange="applyFilter()">
+                        <option value="all">Alle</option>
+                        <option value="open" selected>Offen (pending/saved/missing)</option>
+                        <option value="pending">Pending</option>
+                        <option value="saved">Saved</option>
+                        <option value="missing">Missing</option>
+                        <option value="deployed">Ausgeführt</option>
+                    </select>
+                </label>
             </div>
             <div class=\"status\" id=\"status\"></div>
         </div>
