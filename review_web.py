@@ -1447,10 +1447,11 @@ async function restartService() {
         status((payload.error || payload.message || 'Dienstneustart fehlgeschlagen') + details, 'err');
         return;
     }
-    status(payload.message || 'Dienst wurde neu gestartet. Seite wird neu geladen...', 'ok');
+    status('Dienst wird neu gestartet... bitte Seite neuladen!', 'warn');
     setTimeout(() => {
-        window.location.replace('/');
-    }, 1200);
+        const backBtn = document.querySelector('button[onclick*="window.location.href=\'/\'"]');
+        if (backBtn) backBtn.click();
+    }, 1000);
 }
 
 async function loadConfig() {
