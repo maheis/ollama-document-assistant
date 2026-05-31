@@ -953,6 +953,7 @@ function rowMarkup(row) {
             </div>
         </td>
     </tr>`;
+}
 
 // Einzellöschfunktion jetzt garantiert global
 async function deleteRow(id) {
