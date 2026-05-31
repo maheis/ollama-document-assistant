@@ -37,7 +37,7 @@
 [x] install.sh soll sich danach löschen, wenn sie nicht im repo liegt.
 [ ] weboberfläche testen...
 [ ] dokumentation webproxy
-[ ] reset klappt noch nicht
+[x] reset klappt noch nicht
 [ ] review ordner wird noch nicht generiert
 [x] aktionen buttons sind nicht sichtbar?! dafür die lernen haken. lernen soll komplett in der weboberfläche entfernt werden.
 [ ] scrollbars für die tabelle...

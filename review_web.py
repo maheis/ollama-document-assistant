@@ -840,10 +840,7 @@ HTML_PAGE = """<!doctype html>
                         <th class="col-file">Datei</th>
                         <th>Status</th>
                         <th>Conf</th>
-                        <th>Sender</th>
-                        <th>Kategorie</th>
-                        <th>Kunden-Nr</th>
-                        <th>Titel</th>
+                        <th>Bearbeiten</th>
                         <th>Datum</th>
                         <th>Zielvorschau</th>
                         <th>Aktion</th>
@@ -915,7 +912,72 @@ function rowMarkup(row) {
     const statusLabel = uiStatusLabel(row.status);
     const deployDisabled = row.status === 'deployed' ? 'disabled' : '';
 
-    return `<tr data-id=\"${esc(row.id)}\">
+    return `<tr data-id="${esc(row.id)}">
+        <td class="col-file">
+            <a class="filelink" target="_blank" href="/file?id=${encodeURIComponent(row.id)}">${esc(row.source_name)}</a>
+            <div class="mini">${esc(row.source_preview || row.source)}</div>
+            <div>${badge}</div>
+            ${missing}
+        </td>
+        <td><span class="pill ${statusClass}">${esc(statusLabel)}</span></td>
+        <td>${Number(row.confidence || 0).toFixed(2)}</td>
+        <td>
+            <div class="edit-fields-vertical">
+                <div class="edit-field">
+                    <label>Sender
+                        <input list="sender-mem" name="sender" value="${esc(row.edited.sender || '')}" />
+                    </label>
+                    <div class="mini">LLM: ${esc(row.default.sender || '')}</div>
+                </div>
+                <div class="edit-field">
+                    <label>Kategorie
+                        <select name="category">${categoryOptions(row.edited.category || 'SONSTIGES')}</select>
+                    </label>
+                    <div class="mini">LLM: ${esc(row.default.category || '')}</div>
+                </div>
+                <div class="edit-field">
+                    <label>Kunden-Nr
+                        <input list="customer_number-mem" name="customer_number" value="${esc(row.edited.customer_number || '')}" />
+                    </label>
+                    <div class="mini">LLM: ${esc(row.default.customer_number || '')}</div>
+                </div>
+                <div class="edit-field">
+                    <label>Titel
+                        <input list="title-mem" name="title" value="${esc(row.edited.title || '')}" />
+                    </label>
+                    <div class="mini">LLM: ${esc(row.default.title || '')}</div>
+                </div>
+            </div>
+        </td>
+        <td>
+            <input name="date" value="${esc(row.edited.date || '')}" placeholder="YYYY-MM-DD" />
+            <div class="mini">LLM: ${esc(row.default.date || '')}</div>
+        </td>
+        <td class="mini">${esc(row.target_preview || '')}</td>
+        <td>
+            <div class="row-actions">
+                <button onclick="saveRow('${esc(row.id)}')" ${deployDisabled}>Speichern</button>
+                <button class="primary" onclick="deployRow('${esc(row.id)}')" ${deployDisabled}>Ausführen</button>
+                <button class="danger" onclick="deleteRow('${esc(row.id)}')">Löschen</button>
+            </div>
+        </td>
+    </tr>`;
+                .edit-fields-vertical {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 8px;
+                }
+                .edit-field label {
+                    font-size: 13px;
+                    font-weight: 600;
+                    color: var(--muted);
+                    display: flex;
+                    flex-direction: column;
+                    gap: 2px;
+                }
+                .edit-field {
+                    margin-bottom: 2px;
+                }
         <td class=\"col-file\">
             <a class=\"filelink\" target=\"_blank\" href=\"/file?id=${encodeURIComponent(row.id)}\">${esc(row.source_name)}</a>
             <div class=\"mini\">${esc(row.source_preview || row.source)}</div>
