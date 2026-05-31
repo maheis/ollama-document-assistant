@@ -1643,6 +1643,8 @@ async function doLogin(event) {
 
 
 class Handler(BaseHTTPRequestHandler):
+    def do_POST(self):
+        parsed = urlparse(self.path)
         if parsed.path == "/api/reset-review-state":
             # Leere review_state.json
             try:
@@ -1654,6 +1656,7 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as exc:
                 self._json_response({"ok": False, "error": str(exc)}, status=500)
             return
+        # ...existing code for other POST endpoints...
 
     store: ReviewStore
     auth: PasswordAuth
