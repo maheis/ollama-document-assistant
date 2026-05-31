@@ -199,41 +199,43 @@ class PasswordAuth:
             self.sessions.pop(token, None)
 
 
+
 class ReviewStore:
-        def delete_entry_everywhere(self, entry_id: str) -> bool:
-            """Entfernt den Eintrag aus state und allen Logdateien."""
-            with self.lock:
-                entry = self.state["entries"].get(entry_id)
-                if not entry:
-                    return False
-                # 1. Aus state entfernen
-                del self.state["entries"][entry_id]
-                self._save_state()
-                # 2. Aus allen Logdateien entfernen
-                log_files = self._log_files_for_sync()
-                changed = False
-                for log_file in log_files:
+    def delete_entry_everywhere(self, entry_id: str) -> bool:
+        """Entfernt den Eintrag aus state und allen Logdateien."""
+        with self.lock:
+            entry = self.state["entries"].get(entry_id)
+            if not entry:
+                return False
+            # 1. Aus state entfernen
+            del self.state["entries"][entry_id]
+            self._save_state()
+            # 2. Aus allen Logdateien entfernen
+            log_files = self._log_files_for_sync()
+            changed = False
+            for log_file in log_files:
+                try:
+                    lines = log_file.read_text(encoding="utf-8").splitlines()
+                except Exception:
+                    continue
+                new_lines = []
+                for line in lines:
                     try:
-                        lines = log_file.read_text(encoding="utf-8").splitlines()
+                        event = json.loads(line)
                     except Exception:
-                        continue
-                    new_lines = []
-                    for line in lines:
-                        try:
-                            event = json.loads(line)
-                        except Exception:
-                            new_lines.append(line)
-                            continue
-                        if entry_id_for_event(event) == entry_id:
-                            changed = True
-                            continue  # Zeile entfernen
                         new_lines.append(line)
-                    if changed:
-                        try:
-                            log_file.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
-                        except Exception:
-                            pass
-                return True
+                        continue
+                    if entry_id_for_event(event) == entry_id:
+                        changed = True
+                        continue  # Zeile entfernen
+                    new_lines.append(line)
+                if changed:
+                    try:
+                        log_file.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
+                    except Exception:
+                        pass
+            return True
+
     def __init__(self, paths: Paths, categories: list[str]) -> None:
         self.paths = paths
         self.categories = categories
