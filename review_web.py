@@ -1647,24 +1647,29 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         parsed = urlparse(self.path)
         if parsed.path == "/api/reset-review-state":
-            # Vollständiger Reset: review_state.json leeren und alle Logfiles löschen
+            # Vollständiger Reset: review_state.json leeren und alle Logfiles löschen (Projektordner + Standarddatenverzeichnis)
             try:
+                import os
                 state_file = self.store.paths.state_file
-                logs_dir = state_file.parent / "logs"
+                logs_dirs = [state_file.parent / "logs"]
+                # Standarddatenverzeichnis ergänzen
+                default_data_dir = Path(os.path.expanduser("~/.local/share/ollama-document-assistant/logs"))
+                if default_data_dir not in logs_dirs:
+                    logs_dirs.append(default_data_dir)
                 empty = {"entries": {}, "value_memory": {"sender": [], "category": [], "customer_number": [], "title": []}}
                 # review_state.json leeren
                 with open(state_file, "w", encoding="utf-8") as f:
                     json.dump(empty, f, ensure_ascii=False, indent=2)
-                # Logfiles löschen
+                # Logfiles in allen relevanten logs/-Verzeichnissen löschen
                 deleted_logs = []
-                if logs_dir.exists() and logs_dir.is_dir():
-                    for log in logs_dir.glob("*_organize_log.jsonl"):
-                        try:
-                            log.unlink()
-                            deleted_logs.append(str(log))
-                        except Exception as log_exc:
-                            # Fehler beim Löschen einzelner Logs ignorieren, aber melden
-                            pass
+                for logs_dir in logs_dirs:
+                    if logs_dir.exists() and logs_dir.is_dir():
+                        for log in logs_dir.glob("*_organize_log.jsonl"):
+                            try:
+                                log.unlink()
+                                deleted_logs.append(str(log))
+                            except Exception:
+                                pass
                 self._json_response({"ok": True, "deleted_logs": deleted_logs})
             except Exception as exc:
                 self._json_response({"ok": False, "error": str(exc)}, status=500)
