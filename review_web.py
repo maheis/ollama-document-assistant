@@ -1336,8 +1336,10 @@ CONFIG_PAGE = """<!doctype html>
             </div>
 
 
+
             <div class="actions">
                 <button class="danger" style="background:#ff6b6b; color:#fff; border-color:#ff6b6b" onclick="resetReviewState()">Review zurücksetzen</button>
+                <button onclick="window.location.href='/'">Zurück zur Prüfung</button>
             </div>
 
             <script>
