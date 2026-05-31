@@ -1725,6 +1725,32 @@ async function doLogin(event) {
 
 
 class Handler(BaseHTTPRequestHandler):
+        def _parse_cookies(self) -> dict[str, str]:
+            raw = self.headers.get("Cookie", "")
+            cookies: dict[str, str] = {}
+            for chunk in raw.split(";"):
+                if "=" not in chunk:
+                    continue
+                key, value = chunk.split("=", 1)
+                cookies[key.strip()] = value.strip()
+            return cookies
+
+        def _session_token(self) -> str:
+            return self._parse_cookies().get("oda_session", "")
+
+        def _is_authenticated(self) -> bool:
+            if not self.auth.enabled:
+                return True
+            return self.auth.is_valid(self._session_token())
+
+        def _require_auth(self, is_api: bool) -> bool:
+            if self._is_authenticated():
+                return True
+            if is_api:
+                self._json_response({"error": "unauthorized"}, status=401)
+            else:
+                self._redirect("/login")
+            return False
     # ...existing code for Handler, including do_POST and all methods...
 
     def _text_response(self, payload: str, status: int = 200, content_type: str = "text/html; charset=utf-8") -> None:
