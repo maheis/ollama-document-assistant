@@ -953,7 +953,8 @@ function rowMarkup(row) {
             </div>
         </td>
     </tr>`;
-// Einzellöschfunktion
+
+// Einzellöschfunktion jetzt garantiert global
 async function deleteRow(id) {
     if (!confirm('Eintrag wirklich löschen?')) return;
     status('Lösche Eintrag...');
@@ -971,8 +972,6 @@ async function deleteRow(id) {
     await reloadData();
 }
 window.deleteRow = deleteRow;
-
-}
 
 function rowPayload(tr) {
     return {

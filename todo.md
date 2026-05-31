@@ -39,5 +39,6 @@
 [ ] dokumentation webproxy
 [ ] reset klappt noch nicht
 [ ] review ordner wird noch nicht generiert
-[ ] aktionen buttons sind nicht sichtbar?! dafür die lernen haken. lernen soll komplett in der weboberfläche entfernt werden.
-[ ] 
+[x] aktionen buttons sind nicht sichtbar?! dafür die lernen haken. lernen soll komplett in der weboberfläche entfernt werden.
+[ ] scrollbars für die tabelle...
+
