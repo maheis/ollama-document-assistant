@@ -928,36 +928,76 @@ def apply_runtime_limits(process_nice: int, max_cpu_threads: int) -> None:
             os.environ[env_key] = str(max_cpu_threads)
 
 
-def load_open_review_sources(state_file: Path) -> set[str]:
-    if not state_file.exists() or not state_file.is_file():
-        return set()
+def _review_skip_log_files(log_file: Path) -> list[Path]:
+    candidates: list[Path] = []
 
-    try:
-        payload = json.loads(state_file.read_text(encoding="utf-8"))
-    except Exception:
-        return set()
+    if log_file.exists() and log_file.is_file():
+        candidates.append(log_file)
 
-    if not isinstance(payload, dict):
-        return set()
+    if log_file.parent.exists():
+        candidates.extend([p for p in log_file.parent.glob("*_organize_log.jsonl") if p.is_file()])
 
-    entries = payload.get("entries", {})
-    if not isinstance(entries, dict):
-        return set()
+    return sorted({p.resolve() for p in candidates})
 
+
+def load_open_review_sources(state_file: Path, log_file: Path) -> set[str]:
     open_review_sources: set[str] = set()
-    for entry in entries.values():
-        if not isinstance(entry, dict):
-            continue
-        status = str(entry.get("status", "pending") or "pending").strip().lower()
-        if status == "deployed":
-            continue
-        src = str(entry.get("source", "")).strip()
-        if not src:
-            continue
+    deployed_sources: set[str] = set()
+
+    if state_file.exists() and state_file.is_file():
         try:
-            open_review_sources.add(str(Path(src).expanduser().resolve()))
+            payload = json.loads(state_file.read_text(encoding="utf-8"))
+        except Exception:
+            payload = {}
+
+        if isinstance(payload, dict):
+            entries = payload.get("entries", {})
+            if isinstance(entries, dict):
+                for entry in entries.values():
+                    if not isinstance(entry, dict):
+                        continue
+                    src = str(entry.get("source", "")).strip()
+                    if not src:
+                        continue
+                    try:
+                        src_resolved = str(Path(src).expanduser().resolve())
+                    except Exception:
+                        continue
+
+                    status = str(entry.get("status", "pending") or "pending").strip().lower()
+                    if status == "deployed":
+                        deployed_sources.add(src_resolved)
+                        continue
+                    open_review_sources.add(src_resolved)
+
+    for review_log in _review_skip_log_files(log_file):
+        try:
+            lines = review_log.read_text(encoding="utf-8").splitlines()
         except Exception:
             continue
+
+        for line in lines:
+            raw = line.strip()
+            if not raw:
+                continue
+            try:
+                event = json.loads(raw)
+            except Exception:
+                continue
+            if event.get("status") != "ok":
+                continue
+
+            src = str(event.get("source", "")).strip()
+            if not src:
+                continue
+            try:
+                src_resolved = str(Path(src).expanduser().resolve())
+            except Exception:
+                continue
+
+            if src_resolved in deployed_sources:
+                continue
+            open_review_sources.add(src_resolved)
 
     return open_review_sources
 
@@ -1017,7 +1057,7 @@ def main() -> int:
     review_state_path = Path(args.review_state_file).expanduser()
     if not review_state_path.is_absolute():
         review_state_path = base_dir / review_state_path
-    open_review_sources = load_open_review_sources(review_state_path)
+    open_review_sources = load_open_review_sources(review_state_path, log_path)
 
     files = list(iter_input_files(input_dir, args.sorted_dir, args.review_dir))
     if not files:
