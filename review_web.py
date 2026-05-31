@@ -1461,7 +1461,8 @@ async function restartService() {
         status((payload.error || payload.message || 'Dienstneustart fehlgeschlagen') + details, 'err');
         return;
     }
-    status(payload.message || 'Dienst wurde neu gestartet.', 'ok');
+    status(payload.message || 'Dienst wurde neu gestartet. Seite wird neu geladen...', 'ok');
+    setTimeout(() => window.location.reload(), 1200);
 }
 
 async function loadConfig() {
