@@ -2632,6 +2632,7 @@ class Handler(BaseHTTPRequestHandler):
             if not isinstance(review, dict):
                 review = {}
 
+            import os
             auth_password_file = self._resolve_auth_password_file(config)
             auth_password_file_rel = os.path.relpath(auth_password_file, self.config_path.parent)
             service["auth_password_file"] = auth_password_file_rel
