@@ -1024,6 +1024,7 @@ HTML_PAGE = """<!doctype html>
 <script>
 let DATA = { rows: [], categories: [], value_memory: {} };
 let CURRENT_FILTER = 'open';
+let LAST_ACTIVITY_STATE = null;
 
 function esc(v) {
     return String(v ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;');
@@ -1199,7 +1200,7 @@ function applyFilter() {
     status(`Filter aktiv: ${CURRENT_FILTER}. Angezeigt: ${shownCount}.`);
 }
 
-async function reloadData() {
+async function reloadData(skipScanStatus = false) {
     status('Lade Daten...');
     const res = await fetch('/api/pending');
     const payload = await res.json();
@@ -1217,7 +1218,9 @@ async function reloadData() {
     document.querySelectorAll('datalist').forEach(n => n.remove());
     document.body.insertAdjacentHTML('beforeend', dlSender + dlCustomer + dlTitle);
     status(`Bereit. ${openCount} offene Einträge, ${shownCount} angezeigt.`);
-    await refreshScanStatus();
+    if (!skipScanStatus) {
+        await refreshScanStatus();
+    }
 }
 
 async function refreshScanStatus() {
@@ -1226,7 +1229,14 @@ async function refreshScanStatus() {
     if (!res.ok) {
         return;
     }
+    const currentActivityState = String(payload.activity_state || (payload.activity_running ? 'busy' : 'idle'));
+    const activityChanged = LAST_ACTIVITY_STATE !== null && LAST_ACTIVITY_STATE !== currentActivityState;
+    LAST_ACTIVITY_STATE = currentActivityState;
     setActivityIndicator(payload);
+    if (activityChanged) {
+        await reloadData(true);
+        return;
+    }
     if (payload.running) {
         status('Scan läuft gerade im Hintergrund...');
         return;

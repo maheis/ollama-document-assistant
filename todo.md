@@ -43,5 +43,6 @@
 [ ] scrollbars für die tabelle...
 [x] logfile-reset
 [x] scanintervall von voller stunde ausgehend
-[ ] lernen
+[x] lernen
 [ ] outbox ordner
+[ ] anzeige wieviele dateien noch zu scannen sind
