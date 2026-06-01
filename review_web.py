@@ -297,6 +297,16 @@ def entry_id_for_event(event: dict[str, Any]) -> str:
     return hashlib.sha1(base.encode("utf-8", errors="ignore")).hexdigest()[:16]
 
 
+def normalized_source_path(value: str) -> str:
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+    try:
+        return str(Path(raw).expanduser().resolve())
+    except Exception:
+        return raw
+
+
 @dataclass
 class Paths:
     log_file: Path
@@ -493,6 +503,17 @@ class ReviewStore:
         if not log_files:
             return
 
+        open_entry_id_by_source: dict[str, str] = {}
+        for existing_id, existing_entry in entries.items():
+            if not isinstance(existing_entry, dict):
+                continue
+            status_value = str(existing_entry.get("status", "pending") or "pending").strip().lower()
+            if status_value == "deployed":
+                continue
+            source_key = normalized_source_path(existing_entry.get("source", ""))
+            if source_key:
+                open_entry_id_by_source[source_key] = existing_id
+
         for log_file in log_files:
             try:
                 lines = log_file.read_text(encoding="utf-8").splitlines()
@@ -514,6 +535,7 @@ class ReviewStore:
                     continue
 
                 item_id = entry_id_for_event(event)
+                source_key = normalized_source_path(event.get("source", ""))
                 if item_id in entries:
                     entry = entries[item_id]
                     if "ocr_pdf_rebuild" not in entry:
@@ -532,6 +554,22 @@ class ReviewStore:
                 if default_fields["category"] not in self.categories:
                     default_fields["category"] = "SONSTIGES"
 
+                existing_item_id = open_entry_id_by_source.get(source_key, "") if source_key else ""
+                if existing_item_id and existing_item_id in entries:
+                    entry = entries[existing_item_id]
+                    preserve_edited = self._edited_differs_from_default(entry)
+                    entry["source"] = str(event.get("source"))
+                    entry["target"] = str(event.get("target"))
+                    entry["default"] = default_fields
+                    if not preserve_edited:
+                        entry["edited"] = dict(default_fields)
+                    entry["confidence"] = float(event.get("confidence", 0.0) or 0.0)
+                    entry["review"] = bool(event.get("review", False))
+                    entry["ocr_pdf_rebuild"] = bool(event.get("ocr_pdf_rebuild", False))
+                    entry["ocr_lang"] = str(event.get("ocr_lang", "deu") or "deu").strip() or "deu"
+                    entry["created_at"] = str(event.get("timestamp", ""))
+                    continue
+
                 entries[item_id] = {
                     "id": item_id,
                     "status": "pending",
@@ -547,6 +585,8 @@ class ReviewStore:
                     "deployed_at": "",
                     "deployed_target": "",
                 }
+                if source_key:
+                    open_entry_id_by_source[source_key] = item_id
 
         self._save_state()
 
@@ -3033,7 +3073,7 @@ class Handler(BaseHTTPRequestHandler):
 
         if parsed.path == "/api/scan":
             status_payload = self._scan_status_payload()
-            if status_payload.get("running"):
+            if status_payload.get("activity_running"):
                 self._json_response(status_payload)
                 return
 

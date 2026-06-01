@@ -36,13 +36,14 @@
 [x] uninstall
 [x] install.sh soll sich danach löschen, wenn sie nicht im repo liegt.
 [x] weboberfläche testen...
-[ ] dokumentation webproxy
 [x] reset klappt noch nicht
 [x] review ordner wird noch nicht generiert
 [x] aktionen buttons sind nicht sichtbar?! dafür die lernen haken. lernen soll komplett in der weboberfläche entfernt werden.
-[ ] scrollbars für die tabelle...
 [x] logfile-reset
 [x] scanintervall von voller stunde ausgehend
 [x] lernen
-[ ] outbox ordner
-[ ] anzeige wieviele dateien noch zu scannen sind
+[x] outbox ordner
+[x] anzeige wieviele dateien noch zu scannen sind
+[ ] scrollbars für die tabelle...
+[ ] dokumentation webproxy
+[ ] dokumentation prüfen und beschreibung erweitern!
