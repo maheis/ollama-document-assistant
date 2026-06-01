@@ -69,6 +69,7 @@ DEFAULT_CATEGORIES = [
 PASSWORD_HASH_PREFIX = "pbkdf2_sha256"
 PASSWORD_HASH_ITERATIONS = 260000
 FILE_STREAM_CHUNK_SIZE = 64 * 1024
+SUPPORTED_SCAN_EXT = {".pdf", ".txt", ".md", ".csv", ".log", ".json", ".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp"}
 
 
 def hash_password(password: str, *, salt: Optional[bytes] = None, iterations: int = PASSWORD_HASH_ITERATIONS) -> str:
@@ -1025,6 +1026,8 @@ HTML_PAGE = """<!doctype html>
 let DATA = { rows: [], categories: [], value_memory: {} };
 let CURRENT_FILTER = 'open';
 let LAST_ACTIVITY_STATE = null;
+let META_BASE_TEXT = '';
+let LAST_PENDING_SCAN_COUNT = null;
 
 function esc(v) {
     return String(v ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;');
@@ -1034,6 +1037,17 @@ function status(text, cls = '') {
     const el = document.getElementById('status');
     el.textContent = text;
     el.className = 'status ' + cls;
+}
+
+function renderMeta() {
+    const el = document.getElementById('meta');
+    if (!el) {
+        return;
+    }
+    const suffix = Number.isInteger(LAST_PENDING_SCAN_COUNT)
+        ? ` | Noch zu scannen=${LAST_PENDING_SCAN_COUNT}`
+        : '';
+    el.textContent = META_BASE_TEXT + suffix;
 }
 
 function setActivityIndicator(payload) {
@@ -1208,7 +1222,8 @@ async function reloadData(skipScanStatus = false) {
 
     const counts = payload.counts || {};
     const openCount = (counts.pending || 0) + (counts.saved || 0) + (counts.missing || 0);
-    document.getElementById('meta').textContent = `Log: ${payload.log_file} | Zustand: ${payload.state_file} | Aliase: ${payload.aliases_file} | Offen=${counts.pending || 0}, Gespeichert=${counts.saved || 0}, Fehlend=${counts.missing || 0}, Ausgeführt=${counts.deployed || 0}`;
+    META_BASE_TEXT = `Log: ${payload.log_file} | Zustand: ${payload.state_file} | Aliase: ${payload.aliases_file} | Offen=${counts.pending || 0}, Gespeichert=${counts.saved || 0}, Fehlend=${counts.missing || 0}, Ausgeführt=${counts.deployed || 0}`;
+    renderMeta();
 
     const shownCount = renderRows();
     const dlSender = `<datalist id=\"sender-mem\">${optionsFor('sender')}</datalist>`;
@@ -1232,6 +1247,8 @@ async function refreshScanStatus() {
     const currentActivityState = String(payload.activity_state || (payload.activity_running ? 'busy' : 'idle'));
     const activityChanged = LAST_ACTIVITY_STATE !== null && LAST_ACTIVITY_STATE !== currentActivityState;
     LAST_ACTIVITY_STATE = currentActivityState;
+    LAST_PENDING_SCAN_COUNT = Number.isInteger(payload.pending_scan_count) ? payload.pending_scan_count : null;
+    renderMeta();
     setActivityIndicator(payload);
     if (activityChanged) {
         await reloadData(true);
@@ -2477,6 +2494,110 @@ class Handler(BaseHTTPRequestHandler):
         cmd.extend(extra_args)
         return cmd, project_dir
 
+    def _resolve_scan_input_dir(self, config: dict[str, Any]) -> Path:
+        service = get_section(config, "service")
+        project_dir = self._resolve_project_dir(config)
+        input_path = Path(str(service.get("input", "")).strip()).expanduser()
+        if not input_path.is_absolute():
+            input_path = project_dir / input_path
+        return input_path.resolve()
+
+    def _load_open_review_sources(self) -> set[str]:
+        open_review_sources: set[str] = set()
+        deployed_sources: set[str] = set()
+        state_file = self.store.paths.state_file
+        log_file = self.store.paths.log_file
+
+        if state_file.exists() and state_file.is_file():
+            try:
+                payload = json.loads(state_file.read_text(encoding="utf-8"))
+            except Exception:
+                payload = {}
+
+            entries = payload.get("entries", {}) if isinstance(payload, dict) else {}
+            if isinstance(entries, dict):
+                for entry in entries.values():
+                    if not isinstance(entry, dict):
+                        continue
+                    src = str(entry.get("source", "")).strip()
+                    if not src:
+                        continue
+                    try:
+                        src_resolved = str(Path(src).expanduser().resolve())
+                    except Exception:
+                        continue
+                    status = str(entry.get("status", "pending") or "pending").strip().lower()
+                    if status == "deployed":
+                        deployed_sources.add(src_resolved)
+                        continue
+                    open_review_sources.add(src_resolved)
+
+        log_files: list[Path] = []
+        if log_file.exists() and log_file.is_file():
+            log_files.append(log_file)
+        if log_file.parent.exists():
+            log_files.extend(path for path in log_file.parent.glob("*_organize_log.jsonl") if path.is_file())
+
+        for review_log in sorted({path.resolve() for path in log_files}):
+            try:
+                lines = review_log.read_text(encoding="utf-8").splitlines()
+            except Exception:
+                continue
+
+            for line in lines:
+                raw = line.strip()
+                if not raw:
+                    continue
+                try:
+                    event = json.loads(raw)
+                except Exception:
+                    continue
+                if event.get("status") != "ok":
+                    continue
+                src = str(event.get("source", "")).strip()
+                if not src:
+                    continue
+                try:
+                    src_resolved = str(Path(src).expanduser().resolve())
+                except Exception:
+                    continue
+                if src_resolved in deployed_sources:
+                    continue
+                open_review_sources.add(src_resolved)
+
+        return open_review_sources
+
+    def _pending_scan_file_count(self) -> Optional[int]:
+        config, load_errors = self._load_runtime_config()
+        if load_errors:
+            return None
+
+        try:
+            input_dir = self._resolve_scan_input_dir(config)
+        except Exception:
+            return None
+
+        if not input_dir.exists() or not input_dir.is_dir():
+            return 0
+
+        open_review_sources = self._load_open_review_sources()
+        count = 0
+        for path in input_dir.rglob("*"):
+            if not path.is_file():
+                continue
+            if any(part.startswith(".") for part in path.parts):
+                continue
+            if path.suffix.lower() not in SUPPORTED_SCAN_EXT:
+                continue
+            try:
+                resolved = str(path.resolve())
+            except Exception:
+                continue
+            if resolved in open_review_sources:
+                continue
+            count += 1
+        return count
+
     def _organize_options_from_args(self, extra_args: list[str]) -> dict[str, Any]:
         values: dict[str, Any] = {
             "ollama_timeout": 1800,
@@ -2687,6 +2808,7 @@ class Handler(BaseHTTPRequestHandler):
             "last_finished_at": self.scan_last_finished_at,
             "activity_running": activity_running,
             "activity_state": "busy" if activity_running else "idle",
+            "pending_scan_count": self._pending_scan_file_count(),
         }
         if manual_pid is not None and manual_running:
             payload["pid"] = manual_pid
