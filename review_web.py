@@ -574,18 +574,8 @@ class ReviewStore:
                 values.append(value)
             memory[key] = values[-500:]
 
-    def _infer_roots(self, entry: dict[str, Any]) -> tuple[Path, Path]:
-        src = Path(entry["source"]).resolve()
+    def _infer_sorted_root(self, entry: dict[str, Any]) -> Path:
         original_target = Path(entry["target"]).resolve()
-
-        if entry.get("review"):
-            review_root = original_target.parent
-            if "_review" in review_root.parts:
-                idx = review_root.parts.index("_review")
-                sorted_root = Path(*review_root.parts[:idx]) if idx > 0 else src.parent
-            else:
-                sorted_root = src.parent
-            return sorted_root, review_root
 
         parent = original_target.parent
         if re.match(r"^\d{4}$", parent.name):
@@ -593,17 +583,12 @@ class ReviewStore:
         else:
             sorted_root = parent
 
-        # Backward compatibility for historic targets under outbox/_sorted/YYYY.
-        if sorted_root.name == "_sorted":
-            review_root = sorted_root.parent / "_review"
-        else:
-            review_root = sorted_root / "_review"
-        return sorted_root, review_root
+        return sorted_root
 
     def _build_target(self, entry: dict[str, Any]) -> Path:
         fields = entry["edited"]
         src = Path(entry["source"]).resolve()
-        sorted_root, review_root = self._infer_roots(entry)
+        sorted_root = self._infer_sorted_root(entry)
 
         date_part = ensure_date(fields.get("date", ""), src.name)
         sender_part = slugify(fields.get("sender", ""))
@@ -618,10 +603,7 @@ class ReviewStore:
         parts.append(title_part)
         name = "_".join(parts) + ext
 
-        if entry.get("review"):
-            base_target = review_root / name
-        else:
-            base_target = sorted_root / date_part[:4] / name
+        base_target = sorted_root / date_part[:4] / name
 
         return unique_path(base_target)
 
@@ -632,7 +614,7 @@ class ReviewStore:
 
         p = Path(raw)
         parts = p.parts
-        for marker in ("_review", "_sorted", "outbox", "output"):
+        for marker in ("outbox", "output"):
             if marker in parts:
                 idx = parts.index(marker)
                 return str(Path(*parts[idx:]))
@@ -646,7 +628,7 @@ class ReviewStore:
 
         p = Path(raw)
         parts = p.parts
-        for marker in ("inbox", "_review", "_sorted", "outbox", "output"):
+        for marker in ("inbox", "outbox", "output"):
             if marker in parts:
                 idx = parts.index(marker)
                 return str(Path(*parts[idx:]))

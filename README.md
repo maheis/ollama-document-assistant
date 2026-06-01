@@ -86,7 +86,7 @@ Prioritaet:
 Fuer den Dienst `doc_assistant_service.py` sind vor allem diese Werte relevant:
 
 - `service.input`: Inbox-Pfad
-- `service.output`: Outbox-Basis (Sortierung direkt dort, Review in `_review`)
+- `service.output`: Outbox-Basis fuer die final sortierten Dateien
 - `service.model`: Ollama-Modell
 - `service.schedule_mode`: `interval`, `inbox-trigger` oder `daily`
 - `service.interval_minutes`: Scan-Intervall in Minuten, immer ab voller Stunde auf festen Slots (`*/N`)

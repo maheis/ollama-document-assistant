@@ -6,8 +6,8 @@ Features:
 - Image OCR for common image types
 - Local Ollama JSON classification (category/title/date/confidence)
 - Dry-run suggestions for web-based review/deploy workflow
-- Move low-confidence files to review folder
-- Rename with collision handlinghttps://github.com/settings/copilot/features?utm_source=vscode
+- Mark low-confidence files for manual review in the web UI
+- Rename with collision handling
 """
 
 from __future__ import annotations
@@ -89,7 +89,7 @@ class ExtractionResult:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Organize documents with a local Ollama model")
     parser.add_argument("--input", required=True, help="Input folder with documents")
-    parser.add_argument("--output-root", default="", help="Outbox base folder for sorted files and _review (empty = use input folder)")
+    parser.add_argument("--output-root", default="", help="Outbox base folder for sorted files (empty = use input folder)")
     parser.add_argument("--model", default="qwen2.5:7b-instruct", help="Ollama model name")
     parser.add_argument("--ollama-url", default="http://127.0.0.1:11434", help="Ollama base URL")
     parser.add_argument("--ollama-timeout", type=int, default=1800, help="Ollama request timeout in seconds")
@@ -101,8 +101,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--min-confidence", type=float, default=0.85, help="Confidence threshold for auto-sort")
     parser.add_argument("--max-text-chars", type=int, default=6000, help="Max chars sent to the model")
     parser.add_argument("--sorted-dir", default="", help="Legacy subfolder for categorized files (default empty = output-root directly)")
-    # Review-Ordner ist immer 'review' im Input-Verzeichnis, Option bleibt für Kompatibilität erhalten, wird aber ignoriert
-    parser.add_argument("--review-dir", default="review", help="(IGNORED) Review folder is always 'review' in input dir")
     parser.add_argument("--log-file", default="logs/organize_log.jsonl", help="Path to JSONL log")
     parser.add_argument("--run-log-file", default="logs/organize_run.log", help="Path to plain-text run log (mirrors console output)")
     parser.add_argument("--category-hints-file", default="category_hints.json", help="JSON file with keywords per category")
@@ -866,7 +864,6 @@ def plan_target_path(
     src: Path,
     classification: Classification,
     sorted_root: Path,
-    review_root: Path,
     min_confidence: float,
 ) -> Path:
     date_part = ensure_date(classification.date, src.name)
@@ -883,24 +880,18 @@ def plan_target_path(
     filename_parts.append(title_part)
     filename = "_".join(filename_parts) + ext
 
-    if classification.confidence < min_confidence:
-        target = review_root / filename
-    else:
-        target = sorted_root / year_part / filename
+    target = sorted_root / year_part / filename
 
     target.parent.mkdir(parents=True, exist_ok=True)
     return unique_path(target)
 
 
-def iter_input_files(input_dir: Path, sorted_dir_name: str, review_dir_name: str):
-    review_folder = input_dir / "review"
+def iter_input_files(input_dir: Path, sorted_dir_name: str):
     for p in input_dir.rglob("*"):
         if not p.is_file():
             continue
 
-        # Überspringe Dateien im review-Ordner oder in generierten Output-Ordnern
-        if review_folder in p.parents:
-            continue
+        # Überspringe Dateien in generierten Output-Ordnern
         if sorted_dir_name in p.parts:
             continue
         if any(part.startswith(".") for part in p.parts):
@@ -1029,8 +1020,6 @@ def main() -> int:
         output_root = (Path.cwd() / output_root).resolve()
 
     sorted_root = output_root / args.sorted_dir if str(args.sorted_dir).strip() else output_root
-    # Review-Ordner ist immer 'review' in der Inbox
-    review_root = input_dir / "review"
     log_path = build_dated_log_path(args.log_file, date_prefix, "organize_log.jsonl")
     log_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -1059,7 +1048,7 @@ def main() -> int:
         review_state_path = base_dir / review_state_path
     open_review_sources = load_open_review_sources(review_state_path, log_path)
 
-    files = list(iter_input_files(input_dir, args.sorted_dir, args.review_dir))
+    files = list(iter_input_files(input_dir, args.sorted_dir))
     if not files:
         emit("[INFO] Keine verarbeitbaren Dateien gefunden.", run_log_path)
         emit(f"[INFO] run_log: {run_log_path}", run_log_path)
@@ -1189,7 +1178,6 @@ def main() -> int:
                 src=src,
                 classification=cls,
                 sorted_root=sorted_root,
-                review_root=review_root,
                 min_confidence=args.min_confidence,
             )
 
@@ -1206,15 +1194,7 @@ def main() -> int:
                     should_rebuild_ocr_pdf = False
 
             in_review = cls.confidence < args.min_confidence
-            # NEU: Wenn in_review und Datei ist noch nicht im review-Ordner, verschiebe sie dorthin
-            if apply_changes and in_review and src.parent != review_root:
-                review_target = review_root / src.name
-                review_target.parent.mkdir(parents=True, exist_ok=True)
-                shutil.move(str(src), str(review_target))
-                src = review_target
-                target = review_target
-
-            elif apply_changes:
+            if apply_changes:
                 if should_rebuild_ocr_pdf:
                     rebuilt = build_ocr_pdf(src, target, args.lang)
                     if rebuilt:

@@ -42,4 +42,4 @@
 [x] aktionen buttons sind nicht sichtbar?! dafür die lernen haken. lernen soll komplett in der weboberfläche entfernt werden.
 [ ] scrollbars für die tabelle...
 [x] logfile-reset
-[ ] scanintervall von voller stunde ausgehend
+[x] scanintervall von voller stunde ausgehend
