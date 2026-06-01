@@ -1590,11 +1590,24 @@ CONFIG_PAGE = """<!doctype html>
 
             <div class="actions">
                 <button class="primary" onclick="saveConfig()">Speichern</button>
+                <button class="danger" style="background:#c85d16; color:#fff; border-color:#c85d16" onclick="resetLogFiles()">Logfiles löschen</button>
                 <button class="danger" style="background:#ff6b6b; color:#fff; border-color:#ff6b6b" onclick="resetReviewState()">Review zurücksetzen</button>
                 <button onclick="window.location.href='/'">Zurück zur Prüfung</button>
             </div>
 
             <script>
+            async function resetLogFiles() {
+                if (!confirm('Wirklich alle Logfiles löschen?')) return;
+                status('Lösche Logfiles...');
+                const res = await fetch('/api/reset-logfiles', { method: 'POST' });
+                const payload = await res.json();
+                if (!res.ok || payload.ok === false) {
+                    status(payload.error || 'Logfile-Reset fehlgeschlagen', 'err');
+                    return;
+                }
+                status(`Logfiles gelöscht: ${payload.deleted_logs?.length || 0}`, 'ok');
+            }
+
             async function resetReviewState() {
                 if (!confirm('Wirklich alle Review-Einträge löschen?')) return;
                 status('Setze Review-State zurück...');
@@ -2203,6 +2216,32 @@ class Handler(BaseHTTPRequestHandler):
     def _logs_dir(self) -> Path:
         return self.store.paths.log_file.parent.resolve()
 
+    def _candidate_log_dirs(self) -> list[Path]:
+        state_file = self.store.paths.state_file
+        log_file = self.store.paths.log_file
+        dirs = {
+            (log_file.parent / "logs").resolve(),
+            Path(os.path.expanduser("~/.local/share/ollama-document-assistant/logs")).resolve(),
+            (state_file.parent / "logs").resolve(),
+            log_file.parent.resolve(),
+        }
+        return sorted(dirs)
+
+    def _delete_all_log_files(self) -> list[str]:
+        deleted_logs: list[str] = []
+        for logs_dir in self._candidate_log_dirs():
+            if not logs_dir.exists() or not logs_dir.is_dir():
+                continue
+            for log in logs_dir.iterdir():
+                if not log.is_file():
+                    continue
+                try:
+                    log.unlink()
+                    deleted_logs.append(str(log))
+                except Exception:
+                    continue
+        return deleted_logs
+
     def _list_log_files(self) -> list[Path]:
         logs_dir = self._logs_dir()
         if not logs_dir.exists() or not logs_dir.is_dir():
@@ -2308,12 +2347,6 @@ class Handler(BaseHTTPRequestHandler):
         )
 
     def _restart_user_service(self) -> dict[str, Any]:
-        if shutil.which("systemctl") is None:
-            return {
-                "ok": False,
-                "message": "systemctl nicht gefunden",
-            }
-
         cmd = ["systemctl", "--user", "restart", "ollama-document-assistant.service"]
         try:
             proc = subprocess.run(
@@ -2326,7 +2359,8 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as exc:
             return {
                 "ok": False,
-                "message": f"Dienstneustart fehlgeschlagen: {exc}",
+                "message": "Dienstneustart fehlgeschlagen",
+                "details": str(exc),
             }
 
         if proc.returncode != 0:
@@ -2809,31 +2843,23 @@ class Handler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         payload = self._read_json()
 
+        if parsed.path == "/api/reset-logfiles":
+            try:
+                deleted_logs = self._delete_all_log_files()
+                self._json_response({"ok": True, "deleted_logs": deleted_logs})
+            except Exception as exc:
+                self._json_response({"ok": False, "error": str(exc)}, status=500)
+            return
+
         if parsed.path == "/api/reset-review-state":
             try:
-                import os
                 state_file = self.store.paths.state_file
-                log_file = self.store.paths.log_file
-                logs_dirs = set()
-                logs_dirs.add((log_file.parent / "logs").resolve())
-                default_data_dir = Path(os.path.expanduser("~/.local/share/ollama-document-assistant/logs")).resolve()
-                logs_dirs.add(default_data_dir)
-                logs_dirs.add((state_file.parent / "logs").resolve())
-                logs_dirs.add((log_file.parent).resolve())
                 empty = {"entries": {}, "value_memory": {"sender": [], "category": [], "customer_number": [], "title": []}}
                 with open(state_file, "w", encoding="utf-8") as f:
                     json.dump(empty, f, ensure_ascii=False, indent=2)
                 self.store.state = empty
                 self.store.aliases = {"sender": {}, "category": {}, "customer_number": {}, "title": {}}
-                deleted_logs = []
-                for logs_dir in logs_dirs:
-                    if logs_dir.exists() and logs_dir.is_dir():
-                        for log in logs_dir.glob("*_organize_log.jsonl"):
-                            try:
-                                log.unlink()
-                                deleted_logs.append(str(log))
-                            except Exception:
-                                pass
+                deleted_logs = self._delete_all_log_files()
                 self._json_response({"ok": True, "deleted_logs": deleted_logs})
             except Exception as exc:
                 self._json_response({"ok": False, "error": str(exc)}, status=500)

@@ -35,10 +35,10 @@
 [x] installation über wget/curl (install.sh ziehen und dann abfahrt mit dem rest inkl. checkout.)
 [x] uninstall
 [x] install.sh soll sich danach löschen, wenn sie nicht im repo liegt.
-[ ] weboberfläche testen...
+[x] weboberfläche testen...
 [ ] dokumentation webproxy
 [x] reset klappt noch nicht
-[ ] review ordner wird noch nicht generiert
+[x] review ordner wird noch nicht generiert
 [x] aktionen buttons sind nicht sichtbar?! dafür die lernen haken. lernen soll komplett in der weboberfläche entfernt werden.
 [ ] scrollbars für die tabelle...
-
+[ ] logfile-reset
