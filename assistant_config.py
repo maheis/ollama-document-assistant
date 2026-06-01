@@ -83,6 +83,31 @@ def validate_config(config: dict[str, Any]) -> list[str]:
         _validate_str(errors, service, "project_dir", scope="service")
         _validate_str_list(errors, service, "organize_extra_args", scope="service")
 
+    notifications = config.get("notifications", {})
+    if notifications and not isinstance(notifications, dict):
+        errors.append("notifications must be an object")
+    if isinstance(notifications, dict):
+        email = notifications.get("email", {})
+        if email and not isinstance(email, dict):
+            errors.append("notifications.email must be an object")
+        if isinstance(email, dict):
+            _validate_bool(errors, email, "enabled", scope="notifications.email")
+            _validate_str(errors, email, "to", scope="notifications.email")
+            _validate_str(errors, email, "from", scope="notifications.email")
+            _validate_str(errors, email, "smtp_host", scope="notifications.email")
+            _validate_positive_int(errors, email, "smtp_port", scope="notifications.email", min_value=1)
+            _validate_str(errors, email, "smtp_username", scope="notifications.email")
+            _validate_str(errors, email, "smtp_password", scope="notifications.email")
+            _validate_bool(errors, email, "smtp_starttls", scope="notifications.email")
+            _validate_bool(errors, email, "smtp_ssl", scope="notifications.email")
+            _validate_str(errors, email, "subject_prefix", scope="notifications.email")
+            if bool(email.get("smtp_ssl", False)) and bool(email.get("smtp_starttls", False)):
+                errors.append("notifications.email.smtp_ssl and notifications.email.smtp_starttls cannot both be true")
+            if bool(email.get("enabled", False)):
+                for key in ("to", "from", "smtp_host"):
+                    if not str(email.get(key, "")).strip():
+                        errors.append(f"notifications.email.{key} is required when enabled")
+
     return errors
 
 
@@ -92,6 +117,14 @@ def _validate_str(errors: list[str], section: dict[str, Any], key: str, scope: s
         return
     if not isinstance(value, str):
         errors.append(f"{scope}.{key} must be a string")
+
+
+def _validate_bool(errors: list[str], section: dict[str, Any], key: str, scope: str) -> None:
+    value = section.get(key)
+    if value is None:
+        return
+    if not isinstance(value, bool):
+        errors.append(f"{scope}.{key} must be a boolean")
 
 
 def _validate_positive_int(

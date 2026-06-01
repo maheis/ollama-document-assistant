@@ -323,6 +323,20 @@ ensure_assistant_config() {
       "--ollama-retries",
       "0"
     ]
+  },
+  "notifications": {
+    "email": {
+      "enabled": false,
+      "to": "",
+      "from": "",
+      "smtp_host": "",
+      "smtp_port": 587,
+      "smtp_username": "",
+      "smtp_password": "",
+      "smtp_starttls": true,
+      "smtp_ssl": false,
+      "subject_prefix": "[ODA]"
+    }
   }
 }
 JSON

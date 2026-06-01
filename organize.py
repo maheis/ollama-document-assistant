@@ -103,6 +103,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--sorted-dir", default="", help="Legacy subfolder for categorized files (default empty = output-root directly)")
     parser.add_argument("--log-file", default="logs/organize_log.jsonl", help="Path to JSONL log")
     parser.add_argument("--run-log-file", default="logs/organize_run.log", help="Path to plain-text run log (mirrors console output)")
+    parser.add_argument("--summary-file", default="logs/organize_summary.json", help="Path to JSON summary file for the last run")
     parser.add_argument("--category-hints-file", default="category_hints.json", help="JSON file with keywords per category")
     parser.add_argument("--keyword-fallback-min-score", type=int, default=2, help="Minimum keyword matches to apply keyword fallback")
     parser.add_argument("--customer-number-hints-file", default="customer_number_hints.json", help="JSON file with labels/patterns for customer/reference number extraction")
@@ -853,6 +854,11 @@ def emit(line: str, run_log_path: Path) -> None:
         f.write(line + "\n")
 
 
+def write_summary(summary_path: Path, payload: dict) -> None:
+    summary_path.parent.mkdir(parents=True, exist_ok=True)
+    summary_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
 def build_dated_log_path(file_name_or_path: str, date_prefix: str, fallback_name: str) -> Path:
     raw = Path((file_name_or_path or "").strip() or fallback_name).expanduser()
     base_name = raw.name or fallback_name
@@ -1022,6 +1028,9 @@ def main() -> int:
     sorted_root = output_root / args.sorted_dir if str(args.sorted_dir).strip() else output_root
     log_path = build_dated_log_path(args.log_file, date_prefix, "organize_log.jsonl")
     log_path.parent.mkdir(parents=True, exist_ok=True)
+    summary_path = Path(args.summary_file).expanduser()
+    if not summary_path.is_absolute():
+        summary_path = (Path.cwd() / summary_path).resolve()
 
     categories = [c.strip().upper() for c in args.categories if c.strip()]
     if "SONSTIGES" not in categories:
@@ -1260,6 +1269,19 @@ def main() -> int:
     emit(
         f"[RUN] {datetime.now().isoformat(timespec='seconds')} finished status={'ok' if stats['errors'] == 0 else 'error'}",
         run_log_path,
+    )
+
+    write_summary(
+        summary_path,
+        {
+            "finished_at": datetime.now().isoformat(timespec="seconds"),
+            "status": "ok" if stats["errors"] == 0 else "error",
+            "input": str(input_dir),
+            "output": str(output_root),
+            "log_file": str(log_path),
+            "run_log_file": str(run_log_path),
+            "stats": stats,
+        },
     )
 
     return 0 if stats["errors"] == 0 else 1

@@ -1,4 +1,4 @@
-# Ollama Document Assistant (Debian, CPU-only)
+# Ollama Document Assistant
 
 Lokale Dokument-Automatisierung mit [Ollama](https://ollama.com), OCR und Web-Review.
 Dieses Projekt ist in Zusammenarbeit mit dem Copilot entstanden.
@@ -70,6 +70,7 @@ Gesteuert werden u. a.:
 - Login-Passwortdatei
 - Scan-Intervall
 - Modell sowie Inbox- und Ausgabepfad für den Dienst
+- E-Mail-Benachrichtigungen nach abgeschlossenen Scans mit neuen Prüffällen
 
 Beispiel (service-Block):
 
@@ -101,6 +102,21 @@ Für den Dienst `doc_assistant_service.py` sind vor allem diese Werte relevant:
 - `service.interval_minutes`: Scan-Intervall in Minuten, immer ab voller Stunde auf festen Slots (`*/N`)
 - `service.daily_time`: Uhrzeit für den täglichen Lauf (`HH:MM`, nur bei `daily`)
 - `service.inbox_poll_seconds`: Polling-Intervall für Inbox-Trigger (nur bei `inbox-trigger`)
+
+Für Benachrichtigungen gibt es zusätzlich:
+
+- `notifications.email.enabled`: E-Mail-Versand aktivieren/deaktivieren
+- `notifications.email.to`: Empfänger, mehrere Adressen kommasepariert
+- `notifications.email.from`: Absenderadresse
+- `notifications.email.smtp_host`: SMTP-Server
+- `notifications.email.smtp_port`: SMTP-Port
+- `notifications.email.smtp_username`: optionaler SMTP-Benutzer
+- `notifications.email.smtp_password`: optionales SMTP-Passwort
+- `notifications.email.smtp_starttls`: STARTTLS verwenden
+- `notifications.email.smtp_ssl`: direktes SMTP-SSL verwenden
+- `notifications.email.subject_prefix`: Präfix für den Betreff
+
+Eine Mail wird verschickt, wenn ein Scan erfolgreich abgeschlossen wurde und dabei neue Dokumente zur Prüfung entstanden sind. Das gilt sowohl für automatische Läufe des Dienstes als auch für manuell gestartete Scans über die Weboberfläche.
 
 Scheduler-Modi:
 
@@ -280,6 +296,7 @@ Hinweis zur Web-Konfigurationsseite:
 
 - speichert in `assistant_config.json` (service.input/output/model/schedule_mode/interval_minutes/daily_time/inbox_poll_seconds)
 - Web-Passwort kann dort ebenfalls geändert werden (wird in die Passwortdatei geschrieben)
+- SMTP-Daten und Empfänger für Prüfungs-Benachrichtigungen können dort ebenfalls gepflegt werden
 - Logfiles können dort komplett zurückgesetzt werden
 - Update kann dort geprüft und gestartet werden (`Auf Update prüfen`, `Update durchführen`)
 - `Update durchfuehren` ist nur aktiv, wenn wirklich ein neuer Stand im Git-Remote verfuegbar ist

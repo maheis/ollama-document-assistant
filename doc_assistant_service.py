@@ -10,6 +10,8 @@ Behavior:
 from __future__ import annotations
 
 import argparse
+import json
+import os
 import shlex
 import signal
 import subprocess
@@ -20,6 +22,7 @@ from pathlib import Path
 from typing import Optional
 
 from assistant_config import get_section, load_config, pick, validate_config
+from notification_email import send_review_notification
 
 
 def ts() -> str:
@@ -127,6 +130,52 @@ def inbox_has_new_or_changed(prev: dict[str, tuple[int, int]], curr: dict[str, t
     return False
 
 
+def organize_running(project_dir: Path) -> bool:
+    organize_path = str((project_dir / "organize.py").resolve())
+    try:
+        proc = subprocess.run(
+            ["ps", "-eo", "pid=,args="],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except Exception:
+        return False
+
+    if proc.returncode != 0:
+        return False
+
+    current_pid = os.getpid()
+    for line in proc.stdout.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        parts = line.split(None, 1)
+        if len(parts) != 2 or not parts[0].isdigit():
+            continue
+        pid = int(parts[0])
+        args = parts[1]
+        if pid == current_pid:
+            continue
+        if "organize.py" not in args:
+            continue
+        if organize_path in args:
+            return True
+    return False
+
+
+def read_last_summary(project_dir: Path) -> dict:
+    summary_path = (project_dir / "logs" / "organize_summary.json").resolve()
+    if not summary_path.exists() or not summary_path.is_file():
+        return {}
+    try:
+        payload = json.loads(summary_path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
 def build_review_cmd(args: argparse.Namespace, project_dir: Path) -> list[str]:
     cmd = [
         args.python,
@@ -176,6 +225,27 @@ def run_organize_once(args: argparse.Namespace, project_dir: Path) -> int:
     emit("Run dry-run scan: " + " ".join(shlex.quote(part) for part in cmd))
     proc = subprocess.run(cmd, cwd=str(project_dir), check=False)
     emit(f"Dry-run finished with exit code {proc.returncode}")
+    try:
+        cfg = load_config(args.config_file, project_dir)
+        config = cfg.data if isinstance(cfg.data, dict) else {}
+        summary = read_last_summary(project_dir)
+        stats = summary.get("stats", {}) if isinstance(summary.get("stats", {}), dict) else {}
+        new_review_count = int(stats.get("review", 0) or 0)
+        if proc.returncode == 0 and new_review_count > 0:
+            review_url = f"http://{args.host}:{args.port}"
+            result = send_review_notification(
+                config,
+                new_review_count=new_review_count,
+                scan_source=f"service:{args.schedule_mode}",
+                review_url=review_url,
+                input_path=args.input,
+            )
+            if result.sent:
+                emit(f"Review notification email sent for {new_review_count} new entries")
+            elif result.reason not in {"disabled", "no_new_review_entries"}:
+                emit(f"[WARN] Review notification email not sent: {result.reason}")
+    except Exception as exc:
+        emit(f"[WARN] Review notification handling failed: {exc}")
     return proc.returncode
 
 
@@ -288,7 +358,10 @@ def main() -> int:
         last_inbox_snapshot = inbox_snapshot(Path(args.input).expanduser())
         if args.schedule_mode == "inbox-trigger" and last_inbox_snapshot:
             emit("Inbox contains files at startup, running initial dry-run scan.")
-            run_organize_once(args, project_dir)
+            if not organize_running(project_dir):
+                run_organize_once(args, project_dir)
+            else:
+                emit("Skipping initial dry-run scan because organize.py is already running.")
             last_inbox_snapshot = inbox_snapshot(Path(args.input).expanduser())
 
         while not stop["value"]:
@@ -302,14 +375,20 @@ def main() -> int:
             now = time.time()
             if args.schedule_mode == "interval":
                 if now >= next_scan_at:
-                    run_organize_once(args, project_dir)
+                    if organize_running(project_dir):
+                        emit("Skipping interval dry-run scan because organize.py is already running.")
+                    else:
+                        run_organize_once(args, project_dir)
                     next_scan_at = next_interval_run_ts(time.time(), args.interval_minutes)
                 time.sleep(1.0)
                 continue
 
             if args.schedule_mode == "daily":
                 if now >= next_daily_at:
-                    run_organize_once(args, project_dir)
+                    if organize_running(project_dir):
+                        emit("Skipping daily dry-run scan because organize.py is already running.")
+                    else:
+                        run_organize_once(args, project_dir)
                     next_daily_at = next_daily_run_ts(now + 1, daily_hour, daily_minute)
                 time.sleep(1.0)
                 continue
@@ -319,8 +398,11 @@ def main() -> int:
                 inbox_path = (project_dir / inbox_path).resolve()
             current_snapshot = inbox_snapshot(inbox_path)
             if inbox_has_new_or_changed(last_inbox_snapshot, current_snapshot):
-                emit("Inbox change detected, running dry-run scan.")
-                run_organize_once(args, project_dir)
+                if organize_running(project_dir):
+                    emit("Inbox change detected, but organize.py is already running. Skipping trigger.")
+                else:
+                    emit("Inbox change detected, running dry-run scan.")
+                    run_organize_once(args, project_dir)
                 current_snapshot = inbox_snapshot(inbox_path)
             last_inbox_snapshot = current_snapshot
             time.sleep(float(args.inbox_poll_seconds))

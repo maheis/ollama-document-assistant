@@ -39,6 +39,7 @@ from typing import Any, Optional
 from urllib.parse import parse_qs, urlparse
 
 from assistant_config import get_section, load_config, pick, validate_config
+from notification_email import send_review_notification
 
 try:
     from pypdf import PdfReader, PdfWriter
@@ -305,6 +306,19 @@ def normalized_source_path(value: str) -> str:
         return str(Path(raw).expanduser().resolve())
     except Exception:
         return raw
+
+
+def parse_bool_value(value: Any, default: bool = False) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return default
+    raw = str(value).strip().lower()
+    if raw in {"1", "true", "yes", "on", "ja"}:
+        return True
+    if raw in {"0", "false", "no", "off", "nein", ""}:
+        return False
+    return default
 
 
 @dataclass
@@ -1584,6 +1598,134 @@ CONFIG_PAGE = """<!doctype html>
             </div>
 
             <div class=\"section\">
+                <h2>E-Mail</h2>
+                <div class=\"grid\">
+                    <div class=\"field\">
+                        <label for=\"notify-enabled\">Benachrichtigung aktiv</label>
+                        <select id=\"notify-enabled\">
+                            <option value=\"false\">nein</option>
+                            <option value=\"true\">ja</option>
+                        </select>
+                    </div>
+
+                    <div class=\"field\">
+                        <label for=\"notify-to\">Empfänger</label>
+                        <input id=\"notify-to\" placeholder=\"name@example.org\" />
+                    </div>
+
+                    <div class=\"field\">
+                        <label for=\"notify-from\">Absender</label>
+                        <input id=\"notify-from\" placeholder=\"oda@example.org\" />
+                    </div>
+
+                    <div class=\"field\">
+                        <label for=\"notify-subject-prefix\">Betreff-Präfix</label>
+                        <input id=\"notify-subject-prefix\" placeholder=\"[ODA]\" />
+                    </div>
+
+                    <div class=\"field\">
+                        <label for=\"notify-host\">SMTP Host</label>
+                        <input id=\"notify-host\" placeholder=\"smtp.example.org\" />
+                    </div>
+
+                    <div class=\"field\">
+                        <label for=\"notify-port\">SMTP Port</label>
+                        <input id=\"notify-port\" type=\"number\" min=\"1\" step=\"1\" placeholder=\"587\" />
+                    </div>
+
+                    <div class=\"field\">
+                        <label for=\"notify-user\">SMTP Benutzer</label>
+                        <input id=\"notify-user\" placeholder=\"optional\" />
+                    </div>
+
+                    <div class=\"field\">
+                        <label for=\"notify-password\">SMTP Passwort</label>
+                        <input id=\"notify-password\" type=\"password\" autocomplete=\"new-password\" placeholder=\"leer lassen = unverändert\" />
+                    </div>
+
+                    <div class=\"field\">
+                        <label for=\"notify-starttls\">STARTTLS</label>
+                        <select id=\"notify-starttls\">
+                            <option value=\"true\">ja</option>
+                            <option value=\"false\">nein</option>
+                        </select>
+                    </div>
+
+                    <div class=\"field\">
+                        <label for=\"notify-ssl\">SMTP SSL</label>
+                        <select id=\"notify-ssl\">
+                            <option value=\"false\">nein</option>
+                            <option value=\"true\">ja</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <div class=\"section\">
+                <h2>E-Mail</h2>
+                <div class=\"grid\">
+                    <div class=\"field\">
+                        <label for=\"notify-enabled\">Benachrichtigung aktiv</label>
+                        <select id=\"notify-enabled\">
+                            <option value=\"false\">nein</option>
+                            <option value=\"true\">ja</option>
+                        </select>
+                    </div>
+
+                    <div class=\"field\">
+                        <label for=\"notify-to\">Empfänger</label>
+                        <input id=\"notify-to\" placeholder=\"name@example.org\" />
+                    </div>
+
+                    <div class=\"field\">
+                        <label for=\"notify-from\">Absender</label>
+                        <input id=\"notify-from\" placeholder=\"oda@example.org\" />
+                    </div>
+
+                    <div class=\"field\">
+                        <label for=\"notify-subject-prefix\">Betreff-Präfix</label>
+                        <input id=\"notify-subject-prefix\" placeholder=\"[ODA]\" />
+                    </div>
+
+                    <div class=\"field\">
+                        <label for=\"notify-host\">SMTP Host</label>
+                        <input id=\"notify-host\" placeholder=\"smtp.example.org\" />
+                    </div>
+
+                    <div class=\"field\">
+                        <label for=\"notify-port\">SMTP Port</label>
+                        <input id=\"notify-port\" type=\"number\" min=\"1\" step=\"1\" placeholder=\"587\" />
+                    </div>
+
+                    <div class=\"field\">
+                        <label for=\"notify-user\">SMTP Benutzer</label>
+                        <input id=\"notify-user\" placeholder=\"optional\" />
+                    </div>
+
+                    <div class=\"field\">
+                        <label for=\"notify-password\">SMTP Passwort</label>
+                        <input id=\"notify-password\" type=\"password\" autocomplete=\"new-password\" placeholder=\"leer lassen = unverändert\" />
+                    </div>
+
+                    <div class=\"field\">
+                        <label for=\"notify-starttls\">STARTTLS</label>
+                        <select id=\"notify-starttls\">
+                            <option value=\"true\">ja</option>
+                            <option value=\"false\">nein</option>
+                        </select>
+                    </div>
+
+                    <div class=\"field\">
+                        <label for=\"notify-ssl\">SMTP SSL</label>
+                        <select id=\"notify-ssl\">
+                            <option value=\"false\">nein</option>
+                            <option value=\"true\">ja</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <div class=\"section\">
                 <h2>Ollama</h2>
                 <div class=\"grid\">
                     <div class=\"field\">
@@ -1782,6 +1924,8 @@ async function loadConfig() {
 
     const service = payload.service || {};
     const organize = service.organize_options || {};
+    const notifications = payload.notifications || {};
+    const email = notifications.email || {};
     byId('input').value = service.input || '';
     byId('output').value = service.output || '';
     byId('model').value = service.model || '';
@@ -1798,6 +1942,16 @@ async function loadConfig() {
     byId('sleep-between-files').value = organize.sleep_between_files ?? 0.4;
     byId('new-password').value = '';
     byId('new-password-confirm').value = '';
+    byId('notify-enabled').value = String(!!email.enabled);
+    byId('notify-to').value = email.to || '';
+    byId('notify-from').value = email.from || '';
+    byId('notify-subject-prefix').value = email.subject_prefix || '[ODA]';
+    byId('notify-host').value = email.smtp_host || '';
+    byId('notify-port').value = email.smtp_port ?? 587;
+    byId('notify-user').value = email.smtp_username || '';
+    byId('notify-password').value = '';
+    byId('notify-starttls').value = String(email.smtp_starttls !== false);
+    byId('notify-ssl').value = String(!!email.smtp_ssl);
     byId('meta').textContent = `Config-Datei: ${payload.config_path} | Passwortdatei: ${payload.auth_password_file || '-'}`;
     status('Konfiguration geladen.', 'ok');
     await checkForUpdate();
@@ -1829,6 +1983,20 @@ async function saveConfig() {
         auth: {
             new_password: newPassword,
             new_password_confirm: newPasswordConfirm
+        },
+        notifications: {
+            email: {
+                enabled: byId('notify-enabled').value,
+                to: byId('notify-to').value,
+                from: byId('notify-from').value,
+                subject_prefix: byId('notify-subject-prefix').value,
+                smtp_host: byId('notify-host').value,
+                smtp_port: byId('notify-port').value,
+                smtp_username: byId('notify-user').value,
+                smtp_password: byId('notify-password').value,
+                smtp_starttls: byId('notify-starttls').value,
+                smtp_ssl: byId('notify-ssl').value
+            }
         }
     };
 
@@ -2182,6 +2350,7 @@ class Handler(BaseHTTPRequestHandler):
     scan_proc: Optional[subprocess.Popen[bytes]] = None
     scan_last_exit_code: Optional[int] = None
     scan_last_finished_at: float = 0.0
+    scan_last_notified_key: str = ""
     update_lock = threading.Lock()
 
     def log_message(self, fmt: str, *args: object) -> None:
@@ -2533,6 +2702,53 @@ class Handler(BaseHTTPRequestHandler):
             cmd.extend(["--output-root", output])
         cmd.extend(extra_args)
         return cmd, project_dir
+
+    def _read_last_organize_summary(self, project_dir: Path) -> dict[str, Any]:
+        summary_path = (project_dir / "logs" / "organize_summary.json").resolve()
+        if not summary_path.exists() or not summary_path.is_file():
+            return {}
+        try:
+            payload = json.loads(summary_path.read_text(encoding="utf-8"))
+        except Exception:
+            return {}
+        return payload if isinstance(payload, dict) else {}
+
+    def _send_scan_completion_notification(self, config: dict[str, Any], project_dir: Path, scan_source: str) -> None:
+        summary = self._read_last_organize_summary(project_dir)
+        stats = summary.get("stats", {}) if isinstance(summary.get("stats", {}), dict) else {}
+        new_review_count = int(stats.get("review", 0) or 0)
+        result = send_review_notification(
+            config,
+            new_review_count=new_review_count,
+            scan_source=scan_source,
+            review_url=f"http://{self.server.server_address[0]}:{self.server.server_address[1]}",
+            input_path=str(get_section(config, "service").get("input", "") or ""),
+        )
+        if result.sent:
+            print(f"[INFO] Review notification email sent for {new_review_count} new entries", flush=True)
+        elif result.reason not in {"disabled", "no_new_review_entries"}:
+            print(f"[WARN] Review notification email not sent: {result.reason}", flush=True)
+
+    def _watch_scan_process(self, proc: subprocess.Popen[bytes], config: dict[str, Any], project_dir: Path) -> None:
+        rc = proc.wait()
+        finished_at = time.time()
+        with self.scan_lock:
+            if self.scan_proc is proc:
+                self.scan_proc = None
+            self.scan_last_exit_code = rc
+            self.scan_last_finished_at = finished_at
+
+        notification_key = f"{proc.pid}:{int(finished_at)}"
+        with self.scan_lock:
+            if self.scan_last_notified_key == notification_key:
+                return
+            self.scan_last_notified_key = notification_key
+
+        if rc == 0:
+            try:
+                self._send_scan_completion_notification(config, project_dir, "web:manual")
+            except Exception as exc:
+                print(f"[WARN] Manual scan notification handling failed: {exc}", flush=True)
 
     def _resolve_scan_input_dir(self, config: dict[str, Any]) -> Path:
         service = get_section(config, "service")
@@ -2912,6 +3128,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._json_response({"error": "config_load_failed", "errors": errors}, status=500)
                 return
             service = get_section(config, "service")
+            notifications = get_section(config, "notifications")
+            email = get_section(notifications, "email")
             organize_extra_args = [str(v) for v in service.get("organize_extra_args", [])] if isinstance(service.get("organize_extra_args", []), list) else []
             organize_options = self._organize_options_from_args(organize_extra_args)
             self._json_response(
@@ -2927,6 +3145,19 @@ class Handler(BaseHTTPRequestHandler):
                         "daily_time": str(service.get("daily_time", "02:00")).strip() or "02:00",
                         "inbox_poll_seconds": int(service.get("inbox_poll_seconds", 2) or 2),
                         "organize_options": organize_options,
+                    },
+                    "notifications": {
+                        "email": {
+                            "enabled": parse_bool_value(email.get("enabled", False), False),
+                            "to": str(email.get("to", "")).strip(),
+                            "from": str(email.get("from", "")).strip(),
+                            "smtp_host": str(email.get("smtp_host", "")).strip(),
+                            "smtp_port": int(email.get("smtp_port", 587) or 587),
+                            "smtp_username": str(email.get("smtp_username", "")).strip(),
+                            "smtp_starttls": parse_bool_value(email.get("smtp_starttls", True), True),
+                            "smtp_ssl": parse_bool_value(email.get("smtp_ssl", False), False),
+                            "subject_prefix": str(email.get("subject_prefix", "[ODA]")).strip() or "[ODA]",
+                        }
                     },
                 }
             )
@@ -3097,6 +3328,9 @@ class Handler(BaseHTTPRequestHandler):
             with self.scan_lock:
                 self.scan_proc = proc
 
+            watcher = threading.Thread(target=self._watch_scan_process, args=(proc, config, project_dir), daemon=True)
+            watcher.start()
+
             self._json_response({"ok": True, "running": False, "pid": proc.pid})
             return
 
@@ -3150,6 +3384,8 @@ class Handler(BaseHTTPRequestHandler):
             service_payload = payload.get("service", {}) if isinstance(payload.get("service"), dict) else {}
             auth_payload = payload.get("auth", {}) if isinstance(payload.get("auth"), dict) else {}
             organize_payload = payload.get("organize_options", {}) if isinstance(payload.get("organize_options"), dict) else {}
+            notifications_payload = payload.get("notifications", {}) if isinstance(payload.get("notifications"), dict) else {}
+            email_payload = notifications_payload.get("email", {}) if isinstance(notifications_payload.get("email"), dict) else {}
             input_path = str(service_payload.get("input", "")).strip()
             output_path = str(service_payload.get("output", "")).strip()
             model = str(service_payload.get("model", "")).strip()
@@ -3221,6 +3457,21 @@ class Handler(BaseHTTPRequestHandler):
                 self._json_response({"error": "sleep_between_files must be >= 0"}, status=400)
                 return
 
+            notify_enabled = parse_bool_value(email_payload.get("enabled", False), False)
+            try:
+                notify_port = int(email_payload.get("smtp_port", 587) or 587)
+            except ValueError:
+                self._json_response({"error": "notifications.email.smtp_port must be an integer"}, status=400)
+                return
+            if notify_port < 1:
+                self._json_response({"error": "notifications.email.smtp_port must be >= 1"}, status=400)
+                return
+            notify_starttls = parse_bool_value(email_payload.get("smtp_starttls", True), True)
+            notify_ssl = parse_bool_value(email_payload.get("smtp_ssl", False), False)
+            if notify_starttls and notify_ssl:
+                self._json_response({"error": "notifications.email.smtp_starttls and smtp_ssl cannot both be true"}, status=400)
+                return
+
             if new_password or new_password_confirm:
                 if new_password != new_password_confirm:
                     self._json_response({"error": "password confirmation does not match"}, status=400)
@@ -3260,8 +3511,28 @@ class Handler(BaseHTTPRequestHandler):
             service["auth_password"] = ""
             review["auth_password_file"] = auth_password_file_rel
             review["auth_password"] = ""
+            notifications = config.get("notifications")
+            if not isinstance(notifications, dict):
+                notifications = {}
+            existing_email = notifications.get("email") if isinstance(notifications.get("email"), dict) else {}
+            smtp_password = str(email_payload.get("smtp_password", ""))
+            if not smtp_password:
+                smtp_password = str(existing_email.get("smtp_password", ""))
+            notifications["email"] = {
+                "enabled": notify_enabled,
+                "to": str(email_payload.get("to", "")).strip(),
+                "from": str(email_payload.get("from", "")).strip(),
+                "smtp_host": str(email_payload.get("smtp_host", "")).strip(),
+                "smtp_port": notify_port,
+                "smtp_username": str(email_payload.get("smtp_username", "")).strip(),
+                "smtp_password": smtp_password,
+                "smtp_starttls": notify_starttls,
+                "smtp_ssl": notify_ssl,
+                "subject_prefix": str(email_payload.get("subject_prefix", "[ODA]")).strip() or "[ODA]",
+            }
             config["service"] = service
             config["review_web"] = review
+            config["notifications"] = notifications
 
             validation_errors = validate_config(config)
             if validation_errors:
