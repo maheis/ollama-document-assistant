@@ -203,12 +203,7 @@ def main() -> int:
     args.output = str(pick(args.output, section, "output", "")).strip()
     args.model = str(pick(args.model, section, "model", "")).strip()
     args.schedule_mode = str(pick(args.schedule_mode, section, "schedule_mode", "interval")).strip().lower() or "interval"
-    interval_minutes_value = pick(args.interval_minutes, section, "interval_minutes", None)
-    if interval_minutes_value is None:
-        legacy_seconds = int(pick(None, section, "interval_seconds", 300))
-        args.interval_minutes = max(1, legacy_seconds // 60)
-    else:
-        args.interval_minutes = int(interval_minutes_value)
+    args.interval_minutes = int(pick(args.interval_minutes, section, "interval_minutes", 5))
     args.daily_time = str(pick(args.daily_time, section, "daily_time", "02:00")).strip() or "02:00"
     args.inbox_poll_seconds = int(pick(args.inbox_poll_seconds, section, "inbox_poll_seconds", 2))
     args.host = str(pick(args.host, section, "host", "127.0.0.1")).strip()

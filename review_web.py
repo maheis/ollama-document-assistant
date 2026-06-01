@@ -2767,7 +2767,7 @@ class Handler(BaseHTTPRequestHandler):
                         "output": str(service.get("output", "")).strip(),
                         "model": str(service.get("model", "")).strip(),
                         "schedule_mode": str(service.get("schedule_mode", "interval")).strip() or "interval",
-                        "interval_minutes": int(service.get("interval_minutes", max(1, int(service.get("interval_seconds", 300) or 300) // 60)) or 5),
+                        "interval_minutes": int(service.get("interval_minutes", 5) or 5),
                         "daily_time": str(service.get("daily_time", "02:00")).strip() or "02:00",
                         "inbox_poll_seconds": int(service.get("inbox_poll_seconds", 2) or 2),
                         "organize_options": organize_options,
@@ -3089,7 +3089,6 @@ class Handler(BaseHTTPRequestHandler):
             service["model"] = model
             service["schedule_mode"] = schedule_mode
             service["interval_minutes"] = interval
-            service.pop("interval_seconds", None)
             service["daily_time"] = daily_time
             service["inbox_poll_seconds"] = inbox_poll_seconds
             service["organize_extra_args"] = self._organize_args_from_options(organize_options)
