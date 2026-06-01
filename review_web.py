@@ -893,7 +893,12 @@ HTML_PAGE = """<!doctype html>
             color: var(--ink);
             background: radial-gradient(circle at top right, #20263a 0%, var(--bg) 42%), var(--bg2);
         }
-        .wrap { width: 100vw; max-width: 100vw; margin: 0; padding: 18px; }
+        .wrap {
+            width: 100%;
+            min-width: fit-content;
+            margin: 0;
+            padding: 18px;
+        }
         .top {
             background: var(--card);
             border: 1px solid var(--line);
@@ -940,8 +945,7 @@ HTML_PAGE = """<!doctype html>
             background: var(--card);
             border: 1px solid var(--line);
             border-radius: 12px;
-            overflow: auto;
-            max-height: calc(100vh - 190px);
+            overflow: visible;
         }
         table { width: 100%; border-collapse: collapse; min-width: 1450px; table-layout: auto; }
         th, td { border-bottom: 1px solid var(--line); padding: 8px; text-align: left; vertical-align: top; }
@@ -1024,9 +1028,6 @@ HTML_PAGE = """<!doctype html>
             font-size: 12px;
             border-radius: 8px;
             margin-bottom: 4px;
-        }
-        .grid {
-            overflow-x: auto;
         }
     </style>
 </head>
