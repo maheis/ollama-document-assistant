@@ -68,6 +68,7 @@ def validate_config(config: dict[str, Any]) -> list[str]:
     if isinstance(service, dict):
         _validate_host_port(errors, service, scope="service")
         _validate_enum(errors, service, "schedule_mode", {"interval", "inbox-trigger", "daily"}, scope="service")
+        _validate_positive_int(errors, service, "interval_minutes", scope="service", min_value=1)
         _validate_positive_int(errors, service, "interval_seconds", scope="service", min_value=30)
         _validate_positive_int(errors, service, "inbox_poll_seconds", scope="service", min_value=1)
         _validate_daily_time(errors, service, "daily_time", scope="service")

@@ -308,7 +308,7 @@ ensure_assistant_config() {
     "output": "./output",
     "model": "qwen2.5:7b-instruct",
     "schedule_mode": "interval",
-    "interval_seconds": 300,
+    "interval_minutes": 5,
     "daily_time": "02:00",
     "inbox_poll_seconds": 2,
     "host": "127.0.0.1",

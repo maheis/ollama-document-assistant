@@ -1501,8 +1501,8 @@ CONFIG_PAGE = """<!doctype html>
                     </div>
 
                     <div class=\"field\">
-                        <label for=\"interval\">Scan-Intervall Sekunden (service.interval_seconds)</label>
-                        <input id=\"interval\" type=\"number\" min=\"30\" step=\"1\" placeholder=\"300\" />
+                        <label for=\"interval\">Scan-Intervall Minuten (service.interval_minutes)</label>
+                        <input id=\"interval\" type=\"number\" min=\"1\" step=\"1\" placeholder=\"5\" />
                     </div>
 
                     <div class=\"field\">
@@ -1735,7 +1735,7 @@ async function loadConfig() {
     byId('output').value = service.output || '';
     byId('model').value = service.model || '';
     byId('schedule-mode').value = service.schedule_mode || 'interval';
-    byId('interval').value = service.interval_seconds || 300;
+    byId('interval').value = service.interval_minutes || 5;
     byId('daily-time').value = service.daily_time || '02:00';
     byId('inbox-poll').value = service.inbox_poll_seconds || 2;
     byId('ollama-timeout').value = organize.ollama_timeout ?? 1800;
@@ -1762,7 +1762,7 @@ async function saveConfig() {
             output: byId('output').value,
             model: byId('model').value,
             schedule_mode: byId('schedule-mode').value,
-            interval_seconds: byId('interval').value,
+            interval_minutes: byId('interval').value,
             daily_time: byId('daily-time').value,
             inbox_poll_seconds: byId('inbox-poll').value
         },
@@ -2767,7 +2767,7 @@ class Handler(BaseHTTPRequestHandler):
                         "output": str(service.get("output", "")).strip(),
                         "model": str(service.get("model", "")).strip(),
                         "schedule_mode": str(service.get("schedule_mode", "interval")).strip() or "interval",
-                        "interval_seconds": int(service.get("interval_seconds", 300) or 300),
+                        "interval_minutes": int(service.get("interval_minutes", max(1, int(service.get("interval_seconds", 300) or 300) // 60)) or 5),
                         "daily_time": str(service.get("daily_time", "02:00")).strip() or "02:00",
                         "inbox_poll_seconds": int(service.get("inbox_poll_seconds", 2) or 2),
                         "organize_options": organize_options,
@@ -2998,7 +2998,7 @@ class Handler(BaseHTTPRequestHandler):
             output_path = str(service_payload.get("output", "")).strip()
             model = str(service_payload.get("model", "")).strip()
             schedule_mode = str(service_payload.get("schedule_mode", "interval")).strip().lower() or "interval"
-            interval_raw = str(service_payload.get("interval_seconds", "")).strip()
+            interval_raw = str(service_payload.get("interval_minutes", "")).strip()
             daily_time = str(service_payload.get("daily_time", "02:00")).strip() or "02:00"
             inbox_poll_raw = str(service_payload.get("inbox_poll_seconds", "2")).strip() or "2"
             new_password = str(auth_payload.get("new_password", ""))
@@ -3011,11 +3011,11 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 interval = int(interval_raw)
             except ValueError:
-                self._json_response({"error": "service.interval_seconds must be an integer"}, status=400)
+                self._json_response({"error": "service.interval_minutes must be an integer"}, status=400)
                 return
 
-            if interval < 30:
-                self._json_response({"error": "service.interval_seconds must be >= 30"}, status=400)
+            if interval < 1:
+                self._json_response({"error": "service.interval_minutes must be >= 1"}, status=400)
                 return
 
             try:
@@ -3088,7 +3088,8 @@ class Handler(BaseHTTPRequestHandler):
             service["output"] = output_path
             service["model"] = model
             service["schedule_mode"] = schedule_mode
-            service["interval_seconds"] = interval
+            service["interval_minutes"] = interval
+            service.pop("interval_seconds", None)
             service["daily_time"] = daily_time
             service["inbox_poll_seconds"] = inbox_poll_seconds
             service["organize_extra_args"] = self._organize_args_from_options(organize_options)

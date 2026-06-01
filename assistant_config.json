@@ -12,7 +12,7 @@
         "input": "~/lama/inbox",
         "output": "~/lama/outbox",
         "model": "qwen2.5:7b-instruct",
-        "interval_seconds": 300,
+        "interval_minutes": 5,
         "host": "127.0.0.1",
         "port": 8449,
         "state_file": "review_state.json",

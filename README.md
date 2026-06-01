@@ -89,13 +89,13 @@ Fuer den Dienst `doc_assistant_service.py` sind vor allem diese Werte relevant:
 - `service.output`: Outbox-Basis (Sortierung direkt dort, Review in `_review`)
 - `service.model`: Ollama-Modell
 - `service.schedule_mode`: `interval`, `inbox-trigger` oder `daily`
-- `service.interval_seconds`: Scan-Intervall
+- `service.interval_minutes`: Scan-Intervall in Minuten
 - `service.daily_time`: Uhrzeit fuer den taeglichen Lauf (`HH:MM`, nur bei `daily`)
 - `service.inbox_poll_seconds`: Polling-Intervall fuer Inbox-Trigger (nur bei `inbox-trigger`)
 
 Scheduler-Modi:
 
-1. `interval` (wie bisher): alle `service.interval_seconds` Sekunden
+1. `interval` (wie bisher): alle `service.interval_minutes` Minuten
 2. `inbox-trigger`: prueft die Inbox dauerhaft und startet bei neuen/geaenderten Dateien sofort
 3. `daily`: startet einmal pro Tag zur konfigurierten `service.daily_time`
 
@@ -104,7 +104,7 @@ Beispiele:
 ```json
 "service": {
   "schedule_mode": "interval",
-  "interval_seconds": 300
+  "interval_minutes": 5
 }
 ```
 
@@ -316,7 +316,7 @@ Pfade konfigurieren:
 
 Hinweis zur Web-Konfigurationsseite:
 
-- speichert in `assistant_config.json` (service.input/output/model/schedule_mode/interval_seconds/daily_time/inbox_poll_seconds)
+- speichert in `assistant_config.json` (service.input/output/model/schedule_mode/interval_minutes/daily_time/inbox_poll_seconds)
 - Web-Passwort kann dort ebenfalls geaendert werden (wird in die Passwortdatei geschrieben)
 - Update kann dort geprueft und gestartet werden (`Auf Update pruefen`, `Update durchfuehren`)
 - `Update durchfuehren` ist nur aktiv, wenn wirklich ein neuer Stand im Git-Remote verfuegbar ist

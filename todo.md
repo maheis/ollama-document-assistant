@@ -41,4 +41,5 @@
 [x] review ordner wird noch nicht generiert
 [x] aktionen buttons sind nicht sichtbar?! dafür die lernen haken. lernen soll komplett in der weboberfläche entfernt werden.
 [ ] scrollbars für die tabelle...
-[ ] logfile-reset
+[x] logfile-reset
+[ ] scanintervall von voller stunde ausgehend

@@ -42,7 +42,7 @@ def parse_args() -> argparse.Namespace:
         choices=["interval", "inbox-trigger", "daily"],
         help="Scheduler mode: interval, inbox-trigger, or daily",
     )
-    parser.add_argument("--interval-seconds", type=int, default=None, help="Seconds between dry-run scans")
+    parser.add_argument("--interval-minutes", type=int, default=None, help="Minutes between dry-run scans")
     parser.add_argument("--daily-time", default=None, help="Daily run time in local time (HH:MM)")
     parser.add_argument("--inbox-poll-seconds", type=int, default=None, help="Inbox polling interval for inbox-trigger mode")
     parser.add_argument("--host", default=None, help="Host for review_web.py")
@@ -203,7 +203,12 @@ def main() -> int:
     args.output = str(pick(args.output, section, "output", "")).strip()
     args.model = str(pick(args.model, section, "model", "")).strip()
     args.schedule_mode = str(pick(args.schedule_mode, section, "schedule_mode", "interval")).strip().lower() or "interval"
-    args.interval_seconds = int(pick(args.interval_seconds, section, "interval_seconds", 300))
+    interval_minutes_value = pick(args.interval_minutes, section, "interval_minutes", None)
+    if interval_minutes_value is None:
+        legacy_seconds = int(pick(None, section, "interval_seconds", 300))
+        args.interval_minutes = max(1, legacy_seconds // 60)
+    else:
+        args.interval_minutes = int(interval_minutes_value)
     args.daily_time = str(pick(args.daily_time, section, "daily_time", "02:00")).strip() or "02:00"
     args.inbox_poll_seconds = int(pick(args.inbox_poll_seconds, section, "inbox_poll_seconds", 2))
     args.host = str(pick(args.host, section, "host", "127.0.0.1")).strip()
@@ -223,9 +228,9 @@ def main() -> int:
         emit("[ERROR] Missing input folder. Set --input or service.input in assistant_config.json")
         return 2
 
-    if args.interval_seconds < 30:
-        emit("interval-seconds too low; using minimum of 30")
-        args.interval_seconds = 30
+    if args.interval_minutes < 1:
+        emit("interval-minutes too low; using minimum of 1")
+        args.interval_minutes = 1
 
     if args.inbox_poll_seconds < 1:
         emit("inbox-poll-seconds too low; using minimum of 1")
@@ -261,7 +266,7 @@ def main() -> int:
     emit(f"Web UI: http://{args.host}:{args.port}")
     emit(f"Schedule mode: {args.schedule_mode}")
     if args.schedule_mode == "interval":
-        emit(f"Scan interval: {args.interval_seconds}s")
+        emit(f"Scan interval: {args.interval_minutes} min")
     elif args.schedule_mode == "inbox-trigger":
         emit(f"Inbox trigger polling: {args.inbox_poll_seconds}s")
     else:
@@ -288,7 +293,7 @@ def main() -> int:
             if args.schedule_mode == "interval":
                 if now >= next_scan_at:
                     run_organize_once(args, project_dir)
-                    next_scan_at = now + float(args.interval_seconds)
+                    next_scan_at = now + float(args.interval_minutes * 60)
                 time.sleep(1.0)
                 continue
 
