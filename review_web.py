@@ -1419,6 +1419,10 @@ async function deployAll() {
         status('Keine offenen Einträge.');
         return;
     }
+    if (!window.confirm(`Ausführung wirklich für ${rows.length} Einträge starten?`)) {
+        status('Ausführung abgebrochen.', 'warn');
+        return;
+    }
     status('Ausführung läuft...');
     const res = await fetch('/api/deploy', {
         method: 'POST',
